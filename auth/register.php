@@ -7,6 +7,9 @@ $errors = [];
 $success = false;
 
 $formData = [
+    'firstName' => '',
+    'lastName' => '',
+    'username' => '',
     'name' => '',
     'email' => '',
     'password' => '',
