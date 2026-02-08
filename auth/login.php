@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="min-h-screen w-full flex items-center justify-center p-4" 
-         style="background: url('Farm.jpg') center/cover no-repeat fixed;">
+         style="background: url('../assets/images/Farm.jpg') center/cover no-repeat fixed;">
         <div class="absolute inset-0 bg-gradient-to-b from-black/30 via-black/15 to-black/30 backdrop-blur-[1px]"></div>
 
         <?php if ($success): ?>
@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class=" p-90 flex flex-col items-center justify-center transition-all hover:scale-105">
         <div class="relative mb-6">
             <!-- Local logo image -->
-            <img src="logo.png" alt="Harvee Logo" class="w-100 h-100 object-contain">
+            <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-100 h-100 object-contain">
         </div>
         <p class="mt-4 text-gray-600 font-medium text-center">Tagline dito</p>
     </div>
