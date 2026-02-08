@@ -16,8 +16,6 @@ $formData = [
     'phone' => '',
     'address' => '',
     'farmName' => '',
-    'farmSize' => '',
-    'farmProducts' => '',
     'terms' => false,
     'role' => 'customer'
 ];
@@ -338,21 +336,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             <div id="farmerFields" style="<?php echo ($formData['role'] ?? 'customer') === 'farmer' ? '' : 'display: none;'; ?>">
                                 <div class="space-y-4 pt-2">
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div class="relative">
-                                            <i data-lucide="briefcase" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i>
-                                            <input type="text" name="farmName" placeholder="Farm Name" value="<?php echo $formData['farmName']; ?>" 
-                                                   class="w-full pl-12 pr-4 py-3 rounded-full border border-gray-300 focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/50 transition-all">
-                                        </div>
-                                        <div class="relative">
-                                            <i data-lucide="ruler" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i>
-                                            <input type="number" name="farmSize" placeholder="Acres" value="<?php echo $formData['farmSize']; ?>" 
-                                                   class="w-full pl-12 pr-4 py-3 rounded-full border border-gray-300 focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/50 transition-all">
-                                        </div>
-                                    </div>
                                     <div class="relative">
-                                        <i data-lucide="tag" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i>
-                                        <input type="text" name="farmProducts" placeholder="Main Products" value="<?php echo $formData['farmProducts']; ?>" 
+                                        <i data-lucide="briefcase" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i>
+                                        <input type="text" name="farmName" placeholder="Farm Name" value="<?php echo $formData['farmName']; ?>" 
                                                class="w-full pl-12 pr-4 py-3 rounded-full border border-gray-300 focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/50 transition-all">
                                     </div>
                                 </div>
