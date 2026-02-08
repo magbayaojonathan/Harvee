@@ -1,22 +1,16 @@
 <?php
 session_start();
+require_once '../config/database.php';
 
 $step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
 $errors = [];
 $success = false;
 
 $formData = [
-    'firstName' => '',
-    'lastName' => '',
-    'username' => '',
+    'name' => '',
     'email' => '',
     'password' => '',
     'confirmPassword' => '',
-    'phone' => '',
-    'address' => '',
-    'farmName' => '',
-    'farmSize' => '',
-    'farmProducts' => '',
     'terms' => false,
     'role' => 'customer'
 ];
@@ -42,9 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Step 1 Validation
     if ($step === 1 && isset($_POST['next'])) {
-        if (empty($formData['firstName'])) $errors[] = "First name is required";
-        if (empty($formData['lastName'])) $errors[] = "Last name is required";
-        if (empty($formData['username'])) $errors[] = "Username is required";
+        if (empty($formData['name'])) $errors[] = "Full name is required";
         if (empty($formData['email'])) {
             $errors[] = "Email is required";
         } elseif (!filter_var($formData['email'], FILTER_VALIDATE_EMAIL)) {
@@ -67,9 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (isset($_POST['next'])) {
             if (empty($formData['password'])) $errors[] = "Password is required";
+            if (strlen($formData['password']) < 8) $errors[] = "Password must be at least 8 characters";
             if (empty($formData['confirmPassword'])) $errors[] = "Please confirm password";
             if ($formData['password'] !== $formData['confirmPassword']) $errors[] = "Passwords do not match";
-            if (empty($formData['phone'])) $errors[] = "Phone number is required";
             
             if (empty($errors)) {
                 $_SESSION['form_data'] = $formData;
@@ -87,12 +79,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (isset($_POST['submit'])) {
-            if (empty($formData['address'])) $errors[] = "Address is required";
             if (!$formData['terms']) $errors[] = "You must agree to the terms";
             
             if (empty($errors)) {
-                $success = true;
-                session_destroy();
+                // Proceed to process_register.php
+                $_SESSION['form_data'] = $formData;
+                header('Location: process_register.php');
+                exit;
             }
         }
     }
