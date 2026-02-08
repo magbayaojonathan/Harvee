@@ -10,10 +10,14 @@ $formData = [
     'firstName' => '',
     'lastName' => '',
     'username' => '',
-    'name' => '',
     'email' => '',
     'password' => '',
     'confirmPassword' => '',
+    'phone' => '',
+    'address' => '',
+    'farmName' => '',
+    'farmSize' => '',
+    'farmProducts' => '',
     'terms' => false,
     'role' => 'customer'
 ];
@@ -39,11 +43,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Step 1 Validation
     if ($step === 1 && isset($_POST['next'])) {
-        if (empty($formData['name'])) $errors[] = "Full name is required";
+        if (empty($formData['firstName'])) $errors[] = "First name is required";
+        if (empty($formData['lastName'])) $errors[] = "Last name is required";
+        if (empty($formData['username'])) $errors[] = "Username is required";
+        if (strpos(strtolower($formData['username']), 'math') !== false) $errors[] = "Username cannot contain 'math'";
         if (empty($formData['email'])) {
             $errors[] = "Email is required";
         } elseif (!filter_var($formData['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Invalid email format";
+        }
+        
+        // Check for duplicate email in database
+        if (empty($errors)) {
+            $emailCheckStmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $emailCheckStmt->execute([$formData['email']]);
+            if ($emailCheckStmt->rowCount() > 0) {
+                $errors[] = "Email already exists. Please use a different email.";
+            }
+        }
+        
+        // Check for duplicate username in database
+        if (empty($errors) && !empty($formData['username'])) {
+            $usernameCheckStmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+            $usernameCheckStmt->execute([$formData['username']]);
+            if ($usernameCheckStmt->rowCount() > 0) {
+                $errors[] = "Username already taken. Please choose a different username.";
+            }
         }
         
         if (empty($errors)) {

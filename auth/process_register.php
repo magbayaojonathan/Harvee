@@ -8,16 +8,28 @@ if (!isset($_SESSION['form_data'])) {
 }
 
 $formData = $_SESSION['form_data'];
-$name = trim($formData['name']);
+$firstName = trim($formData['firstName']);
+$lastName = trim($formData['lastName']);
+$username = trim($formData['username']);
 $email = trim($formData['email']);
 $password = $formData['password'];
+$phone = trim($formData['phone']);
+$address = trim($formData['address']);
 $role = $formData['role'] ?? 'customer';
 
 // Validate input
 $errors = [];
 
-if (empty($name)) {
-    $errors[] = "Name is required";
+if (empty($firstName)) {
+    $errors[] = "First name is required";
+}
+
+if (empty($lastName)) {
+    $errors[] = "Last name is required";
+}
+
+if (empty($username)) {
+    $errors[] = "Username is required";
 }
 
 if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -43,6 +55,17 @@ try {
     $errors[] = "Database error: " . $e->getMessage();
 }
 
+// Check if username already exists
+try {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+    $stmt->execute([$username]);
+    if ($stmt->rowCount() > 0) {
+        $errors[] = "Username already taken";
+    }
+} catch (PDOException $e) {
+    $errors[] = "Database error: " . $e->getMessage();
+}
+
 // If no errors, insert user
 if (empty($errors)) {
     try {
@@ -50,14 +73,16 @@ if (empty($errors)) {
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         
         // Insert user into database
-        $stmt = $pdo->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$name, $email, $hashed_password, $role]);
+        $stmt = $pdo->prepare("INSERT INTO users (first_name, last_name, username, email, password, phone, address, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$firstName, $lastName, $username, $email, $hashed_password, $phone, $address, $role]);
         
         $user_id = $pdo->lastInsertId();
         
         // Set session
         $_SESSION['user_id'] = $user_id;
-        $_SESSION['name'] = $name;
+        $_SESSION['username'] = $username;
+        $_SESSION['first_name'] = $firstName;
+        $_SESSION['last_name'] = $lastName;
         $_SESSION['email'] = $email;
         $_SESSION['role'] = $role;
         $_SESSION['logged_in'] = true;
@@ -67,9 +92,9 @@ if (empty($errors)) {
         
         // Redirect based on role
         if ($role === 'farmer') {
-            header('Location: ../farmer/dashboard.php');
+            header('Location: ../auth/login.php');
         } else {
-            header('Location: ../customer/dashboard.php');
+            header('Location: ../auth/login.php');
         }
         exit();
         
@@ -81,7 +106,7 @@ if (empty($errors)) {
 // If there were errors, store them in session and redirect back
 if (!empty($errors)) {
     $_SESSION['register_errors'] = $errors;
-    $_SESSION['old_data'] = $_POST;
+    $_SESSION['form_data'] = $formData;
     header('Location: register.php');
     exit();
 }
