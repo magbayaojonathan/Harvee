@@ -21,7 +21,7 @@ require_once '../shared/navigation.php';
         
         <div class="dashboard-card">
             <h3>Manage Products</h3>
-            <a href="products/manage.php" class="btn">View Products</a>
+            <a href="products/products.php" class="btn">View Products</a>
         </div>
         
         <div class="dashboard-card">

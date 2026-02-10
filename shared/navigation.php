@@ -1,49 +1,65 @@
 <?php
-// Determine depth based on REQUEST_URI
-$uri = $_SERVER['REQUEST_URI'];
-// Count slashes after /HARVEE/
-$harvee_pos = strpos($uri, '/HARVEE/');
-if ($harvee_pos !== false) {
-    $after_harvee = substr($uri, $harvee_pos + 8); // 8 = len('/HARVEE/')
-    $slash_count = substr_count($after_harvee, '/');
-    // slash_count tells us how many directories deep we are
-    $base = str_repeat('../', $slash_count);
-} else {
-    $base = '';
-}
+// Determine the correct base path for relative links
+// Count directory depth from root
+$script_path = dirname($_SERVER['SCRIPT_NAME']);
+$depth = substr_count(trim($script_path, '/'), '/') - substr_count('/HARVEE', '/');
+$base = str_repeat('../', max(0, $depth));
 ?>
 
-<nav class="navbar">
-    <div class="nav-brand">
-        <a href="<?php echo $base; ?>index.php">Harvee</a>
-    </div>
-    
-    <ul class="nav-menu">
-        <li><a href="<?php echo $base; ?>index.php">Home</a></li>
+<nav class="navbar" id="navbar">
+    <div class="nav-container">
+        <div class="nav-brand">
+            <a href="<?php echo $base; ?>index.php">
+                <i class="fas fa-leaf"></i> Harvee
+            </a>
+        </div>
         
-        <?php if(isset($_SESSION['user_id'])): ?>
-            <!-- Logged in navigation -->
-            <?php if($_SESSION['role'] === 'farmer'): ?>
-                <li><a href="<?php echo $base; ?>farmer/dashboard.php">Dashboard</a></li>
-                <li><a href="<?php echo $base; ?>farmer/products/add.php">Add Product</a></li>
-                <li><a href="<?php echo $base; ?>farmer/products/manage.php">Manage Products</a></li>
-                <li><a href="<?php echo $base; ?>farmer/orders.php">My Orders</a></li>
-                <li><a href="<?php echo $base; ?>farmer/profile.php">Profile</a></li>
-            <?php elseif($_SESSION['role'] === 'customer'): ?>
-                <li><a href="<?php echo $base; ?>customer/dashboard.php">Dashboard</a></li>
-                <li><a href="<?php echo $base; ?>customer/browse.php">Browse Products</a></li>
-                <li><a href="<?php echo $base; ?>customer/cart.php">Cart</a></li>
-                <li><a href="<?php echo $base; ?>customer/orders.php">My Orders</a></li>
-                <li><a href="<?php echo $base; ?>customer/profile.php">Profile</a></li>
+        <button class="hamburger" id="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        
+        <ul class="nav-menu" id="navMenu">
+            <li><a href="<?php echo $base; ?>index.php"><i class="fas fa-home"></i> Home</a></li>
+            
+            <?php if(isset($_SESSION['user_id'])): ?>
+                <!-- Logged in navigation -->
+                <?php if($_SESSION['role'] === 'farmer'): ?>
+                    <li class="dropdown">
+                        <a href="#"><i class="fas fa-tractor"></i> Farmer <i class="fas fa-chevron-down"></i></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="<?php echo $base; ?>dashboard.php">Dashboard</a></li>
+                            <li><a href="<?php echo $base; ?>products/add.php">Add Product</a></li>
+                            <li><a href="<?php echo $base; ?>products/products.php">Manage Products</a></li>
+                            <li><a href="<?php echo $base; ?>orders.php">My Orders</a></li>
+                            <li><a href="<?php echo $base; ?>profile.php">Profile</a></li>
+                        </ul>
+                    </li>
+                <?php elseif($_SESSION['role'] === 'customer'): ?>
+                    <li class="dropdown">
+                        <a href="#"><i class="fas fa-shopping-bag"></i> Shopping <i class="fas fa-chevron-down"></i></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="<?php echo $base; ?>browse.php">Browse Products</a></li>
+                            <li><a href="<?php echo $base; ?>cart.php">Cart</a></li>
+                            <li><a href="<?php echo $base; ?>orders.php">My Orders</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="<?php echo $base; ?>dashboard.php"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                <?php endif; ?>
+                
+                <li class="user-info">
+                    <i class="fas fa-user-circle"></i> 
+                    <?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?>
+                </li>
+                <li><a href="<?php echo $base; ?>auth/logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                
+            <?php else: ?>
+                <!-- Guest navigation -->
+                <li><a href="<?php echo $base; ?>customer/browse.php"><i class="fas fa-search"></i> Browse Products</a></li>
+                <li><a href="<?php echo $base; ?>../auth/login.php" class="login-btn"><i class="fas fa-sign-in-alt"></i> Login</a></li>
+                <li><a href="<?php echo $base; ?>../auth/register.php" class="register-btn"><i class="fas fa-user-plus"></i> Register</a></li>
             <?php endif; ?>
-            
-            <li><a href="<?php echo $base; ?>auth/logout.php">Logout</a></li>
-            
-        <?php else: ?>
-            <!-- Guest navigation -->
-            <li><a href="<?php echo $base; ?>customer/browse.php">Browse Products</a></li>
-            <li><a href="<?php echo $base; ?>auth/login.php">Login</a></li>
-            <li><a href="<?php echo $base; ?>auth/register.php">Register</a></li>
-        <?php endif; ?>
-    </ul>
+        </ul>
+    </div>
 </nav>
