@@ -809,7 +809,7 @@ try {
             document.getElementById('productModal').classList.add('flex');
             
             // Load product details
-            fetch(`product_details.php?id=${productId}`)
+            fetch(`../product_details.php?id=${productId}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
