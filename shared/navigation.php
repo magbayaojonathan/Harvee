@@ -55,7 +55,7 @@ $base = str_repeat('../', max(0, $depth));
                 <li><a href="<?php echo $base; ?>auth/logout.php" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                 
             <?php else: ?>
-                <!-- Guest navigation -->
+                <!-- Guest navigationtytgfgfgffg -->
                 <li><a href="<?php echo $base; ?>customer/browse.php"><i class="fas fa-search"></i> Browse Products</a></li>
                 <li><a href="<?php echo $base; ?>../auth/login.php" class="login-btn"><i class="fas fa-sign-in-alt"></i> Login</a></li>
                 <li><a href="<?php echo $base; ?>../auth/register.php" class="register-btn"><i class="fas fa-user-plus"></i> Register</a></li>
