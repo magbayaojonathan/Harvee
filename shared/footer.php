@@ -12,7 +12,7 @@ if ($harvee_pos !== false) {
     $base = '';
 }
 ?>
-
+    
 <nav class="navbar">
     <div class="nav-brand">
         <a href="<?php echo $base; ?>index.php">Harvee</a>
