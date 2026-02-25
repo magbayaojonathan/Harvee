@@ -11,6 +11,22 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
 $user_id = $_SESSION['user_id'];
 $message = '';
 
+// DEBUG: Check database state
+try {
+    $debug_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM products WHERE stock_quantity > 0");
+    $debug_stmt->execute();
+    $product_count = $debug_stmt->fetchColumn();
+    error_log("=== BROWSE.PHP DEBUG ===");
+    error_log("Products with stock: $product_count");
+    
+    $cart_check = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ?");
+    $cart_check->execute([$user_id]);
+    $existing_cart = $cart_check->fetchColumn();
+    error_log("Current cart items for user $user_id: $existing_cart");
+} catch (Exception $e) {
+    error_log("Debug error: " . $e->getMessage());
+}
+
 // Handle Add to Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $product_id = $_POST['product_id'] ?? 0;
@@ -23,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         $product = $stmt->fetch();
         
         if ($product) {
-            if ($product['stock'] >= $quantity) {
+            if ($product['stock_quantity'] >= $quantity) {
                 // Check if item already in cart
                 $stmt = $pdo->prepare("SELECT * FROM cart WHERE user_id = ? AND product_id = ?");
                 $stmt->execute([$user_id, $product_id]);
@@ -32,21 +48,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 if ($existing_item) {
                     // Update quantity
                     $new_quantity = $existing_item['quantity'] + $quantity;
-                    if ($new_quantity <= $product['stock']) {
+                    if ($new_quantity <= $product['stock_quantity']) {
                         $stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ?");
-                        $stmt->execute([$new_quantity, $existing_item['id']]);
-                        $message = "✓ Added to cart! Quantity updated.";
+                        $result = $stmt->execute([$new_quantity, $existing_item['id']]);
+                        if ($result) {
+                            $message = "✓ Added to cart! Quantity updated.";
+                            // Redirect to prevent form resubmission
+                            header('Location: browse.php?success=1');
+                            exit();
+                        } else {
+                            $message = "❌ Failed to update cart.";
+                        }
                     } else {
-                        $message = "⚠ Cannot add more than available stock! Only " . $product['stock'] . " items left.";
+                        $message = "⚠ Cannot add more than available stock! Only " . $product['stock_quantity'] . " items left.";
                     }
                 } else {
-                    // Add new item
-                    $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)");
-                    $stmt->execute([$user_id, $product_id, $quantity]);
-                    $message = "✓ Product added to cart successfully!";
+                    // Add new item - with price_at_time
+                    try {
+                        error_log("Adding to cart - User: $user_id, Product: $product_id, Qty: $quantity, Price: {$product['price']}");
+                        
+                        $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity, price_at_time) VALUES (?, ?, ?, ?)");
+                        $result = $stmt->execute([$user_id, $product_id, $quantity, $product['price']]);
+                        
+                        error_log("INSERT result: " . ($result ? 'SUCCESS' : 'FAILED'));
+                        
+                        // Verify the insert worked
+                        $verify = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ? AND product_id = ?");
+                        $verify->execute([$user_id, $product_id]);
+                        $verify_count = $verify->fetchColumn();
+                        error_log("Cart verification - items for this product: $verify_count");
+                        
+                        if ($result && $verify_count > 0) {
+                            $message = "✓ Product added to cart successfully!";
+                            // Redirect to cart page to show the item
+                            header('Location: cart.php');
+                            exit();
+                        } else {
+                            $errorInfo = $stmt->errorInfo();
+                            $message = "❌ Failed to add to cart: " . $errorInfo[2];
+                        }
+                    } catch (PDOException $e) {
+                        error_log("PDOException in cart insert: " . $e->getMessage());
+                        $message = "❌ Database error: " . $e->getMessage();
+                    }
                 }
             } else {
-                $message = "⚠ Not enough stock available! Only " . $product['stock'] . " items left.";
+                $message = "⚠ Not enough stock available! Only " . $product['stock_quantity'] . " items left.";
             }
         } else {
             $message = "❌ Product not found!";
@@ -54,118 +101,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     }
 }
 
-// Get filter parameters
-$search = $_GET['search'] ?? '';
-$category = $_GET['category'] ?? '';
-$min_price = $_GET['min_price'] ?? '';
-$max_price = $_GET['max_price'] ?? '';
-$sort = $_GET['sort'] ?? 'newest';
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 12;
-$offset = ($page - 1) * $limit;
-
-// Build base query - REMOVED farmer join since it's single farmer
-$sql = "SELECT SQL_CALC_FOUND_ROWS 
-               p.*
-        FROM products p 
-        WHERE p.stock > 0";
-        
-$count_sql = "SELECT COUNT(*) FROM products p WHERE p.stock > 0";
-
-$params = [];
-$count_params = [];
-
-// Apply filters
-if (!empty($search)) {
-    $sql .= " AND (p.product_name LIKE ? OR p.description LIKE ?)";
-    $count_sql .= " AND (p.product_name LIKE ? OR p.description LIKE ?)";
-    $search_term = "%$search%";
-    $params[] = $search_term;
-    $params[] = $search_term;
-    $count_params[] = $search_term;
-    $count_params[] = $search_term;
+// Check for success message from redirect
+if (isset($_GET['success'])) {
+    $message = "✓ Cart updated successfully!";
 }
 
-if (!empty($category)) {
-    $sql .= " AND p.category = ?";
-    $count_sql .= " AND p.category = ?";
-    $params[] = $category;
-    $count_params[] = $category;
-}
+// Initialize variables
+$products = [];
+$total_products = 0;
+$total_pages = 1;
 
-if (!empty($min_price) && is_numeric($min_price)) {
-    $sql .= " AND p.price >= ?";
-    $count_sql .= " AND p.price >= ?";
-    $params[] = (float)$min_price;
-    $count_params[] = (float)$min_price;
-}
+try {
+    // Get filter parameters
+    $search = $_GET['search'] ?? '';
+    $category = $_GET['category'] ?? '';
+    $min_price = $_GET['min_price'] ?? '';
+    $max_price = $_GET['max_price'] ?? '';
+    $sort = $_GET['sort'] ?? 'newest';
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $limit = 12;
+    $offset = ($page - 1) * $limit;
 
-if (!empty($max_price) && is_numeric($max_price)) {
-    $sql .= " AND p.price <= ?";
-    $count_sql .= " AND p.price <= ?";
-    $params[] = (float)$max_price;
-    $count_params[] = (float)$max_price;
-}
+    // Build base query with correct column names
+    $sql = "SELECT SQL_CALC_FOUND_ROWS 
+                   p.*
+            FROM products p 
+            WHERE p.stock_quantity > 0";
+            
+    $count_sql = "SELECT COUNT(*) FROM products p WHERE p.stock_quantity > 0";
 
-// Apply sorting
-switch ($sort) {
-    case 'price_low':
-        $sql .= " ORDER BY p.price ASC";
-        break;
-    case 'price_high':
-        $sql .= " ORDER BY p.price DESC";
-        break;
-    case 'name_asc':
-        $sql .= " ORDER BY p.product_name ASC";
-        break;
-    case 'name_desc':
-        $sql .= " ORDER BY p.product_name DESC";
-        break;
-    case 'stock_high':
-        $sql .= " ORDER BY p.stock DESC";
-        break;
-    default:
-        $sql .= " ORDER BY p.created_at DESC";
-}
+    $params = [];
+    $count_params = [];
 
-// Add pagination - don't add to $params array, bind separately
-$sql .= " LIMIT ? OFFSET ?";
-
-// Get products
-$stmt = $pdo->prepare($sql);
-
-// Bind all parameters with proper types
-$param_index = 1;
-foreach ($params as $param) {
-    // Determine parameter type
-    if (is_int($param)) {
-        $stmt->bindValue($param_index, $param, PDO::PARAM_INT);
-    } elseif (is_float($param)) {
-        $stmt->bindValue($param_index, $param, PDO::PARAM_STR);
-    } else {
-        $stmt->bindValue($param_index, $param, PDO::PARAM_STR);
+    // Apply filters
+    if (!empty($search)) {
+        $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+        $count_sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+        $search_term = "%$search%";
+        $params[] = $search_term;
+        $params[] = $search_term;
+        $count_params[] = $search_term;
+        $count_params[] = $search_term;
     }
-    $param_index++;
+
+    if (!empty($category)) {
+        $sql .= " AND p.category = ?";
+        $count_sql .= " AND p.category = ?";
+        $params[] = $category;
+        $count_params[] = $category;
+    }
+
+    if (!empty($min_price) && is_numeric($min_price)) {
+        $sql .= " AND p.price >= ?";
+        $count_sql .= " AND p.price >= ?";
+        $params[] = (float)$min_price;
+        $count_params[] = (float)$min_price;
+    }
+
+    if (!empty($max_price) && is_numeric($max_price)) {
+        $sql .= " AND p.price <= ?";
+        $count_sql .= " AND p.price <= ?";
+        $params[] = (float)$max_price;
+        $count_params[] = (float)$max_price;
+    }
+
+    // Apply sorting
+    switch ($sort) {
+        case 'price_low':
+            $sql .= " ORDER BY p.price ASC";
+            break;
+        case 'price_high':
+            $sql .= " ORDER BY p.price DESC";
+            break;
+        case 'name_asc':
+            $sql .= " ORDER BY p.name ASC";
+            break;
+        case 'name_desc':
+            $sql .= " ORDER BY p.name DESC";
+            break;
+        case 'stock_high':
+            $sql .= " ORDER BY p.stock_quantity DESC";
+            break;
+        default:
+            $sql .= " ORDER BY p.created_at DESC";
+    }
+
+    // Add pagination
+    $sql .= " LIMIT ? OFFSET ?";
+
+    // Get products
+    $stmt = $pdo->prepare($sql);
+
+    // Bind all parameters with proper types
+    $param_index = 1;
+    foreach ($params as $param) {
+        if (is_int($param)) {
+            $stmt->bindValue($param_index, $param, PDO::PARAM_INT);
+        } elseif (is_float($param)) {
+            $stmt->bindValue($param_index, $param, PDO::PARAM_STR);
+        } else {
+            $stmt->bindValue($param_index, $param, PDO::PARAM_STR);
+        }
+        $param_index++;
+    }
+
+    // Bind LIMIT and OFFSET as integers
+    $stmt->bindValue($param_index++, $limit, PDO::PARAM_INT);
+    $stmt->bindValue($param_index, $offset, PDO::PARAM_INT);
+
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    // Get total count for pagination
+    $count_stmt = $pdo->prepare($count_sql);
+    if (!empty($count_params)) {
+        $count_stmt->execute($count_params);
+    } else {
+        $count_stmt->execute();
+    }
+    $total_products = $count_stmt->fetchColumn();
+    $total_pages = ceil($total_products / $limit);
+    
+} catch (PDOException $e) {
+    // Log error and set empty products array
+    error_log("Browse page error: " . $e->getMessage());
+    $products = [];
+    $total_products = 0;
+    $total_pages = 1;
 }
 
-// Bind LIMIT and OFFSET as integers
-$stmt->bindValue($param_index++, $limit, PDO::PARAM_INT);
-$stmt->bindValue($param_index, $offset, PDO::PARAM_INT);
-
-$stmt->execute();
-$products = $stmt->fetchAll();
-
-// Get total count for pagination
-$count_stmt = $pdo->prepare($count_sql);
-if (!empty($count_params)) {
-    $count_stmt->execute($count_params);
-} else {
-    $count_stmt->execute();
-}
-$total_products = $count_stmt->fetchColumn();
-$total_pages = ceil($total_products / $limit);
-
-// Get categories for filter dropdown - with proper error handling
+// Get categories for filter dropdown
 $categories = [];
 try {
     // Check if category column exists
@@ -559,23 +624,12 @@ try {
                         <div>
                             <h1 class="text-2xl font-bold text-gray-800">Fresh Products from Harvee Farm</h1>
                             <p class="text-gray-600">
-                                <?php if ($total_products > 0): ?>
+                                <?php if ($total_products > 0 && !empty($products)): ?>
                                     Showing <?php echo count($products); ?> of <?php echo $total_products; ?> products
                                 <?php else: ?>
                                     No products found
                                 <?php endif; ?>
                             </p>
-                        </div>
-                        <div class="flex items-center space-x-4">
-                            <a href="cart.php" class="relative px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                                <i class="fas fa-shopping-cart mr-2"></i>
-                                Cart
-                                <?php if ($cart_count > 0): ?>
-                                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                        <?php echo $cart_count; ?>
-                                    </span>
-                                <?php endif; ?>
-                            </a>
                         </div>
                     </div>
                 </div>
@@ -609,8 +663,8 @@ try {
                 <?php else: ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         <?php foreach ($products as $product): 
-                            $is_low_stock = $product['stock'] < 10;
-                            $is_new = strtotime($product['created_at']) > strtotime('-7 days');
+                            $is_low_stock = ($product['stock_quantity'] ?? 0) < 10;
+                            $is_new = isset($product['created_at']) && strtotime($product['created_at']) > strtotime('-7 days');
                         ?>
                             <div class="product-card bg-white rounded-xl shadow-sm overflow-hidden fade-in">
                                 <!-- Product Image & Badges -->
@@ -629,17 +683,17 @@ try {
                                         </span>
                                     <?php endif; ?>
                                     
-                                    <?php if ($is_low_stock): ?>
+                                    <?php if ($is_low_stock && ($product['stock_quantity'] ?? 0) > 0): ?>
                                         <span class="stock-badge px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
-                                            Only <?php echo $product['stock']; ?> left
+                                            Only <?php echo $product['stock_quantity']; ?> left
                                         </span>
                                     <?php endif; ?>
                                     
                                     <span class="absolute bottom-3 left-3 price-tag text-sm">
-                                        ₱<?php echo number_format($product['price'], 2); ?>
+                                        ₱<?php echo number_format($product['price'] ?? 0, 2); ?>
                                     </span>
                                     
-                                    <?php if ($product['category']): ?>
+                                    <?php if (!empty($product['category'])): ?>
                                         <span class="absolute bottom-3 right-3 px-3 py-1 bg-white/90 text-gray-700 text-xs font-medium rounded-full">
                                             <?php echo htmlspecialchars($product['category']); ?>
                                         </span>
@@ -649,14 +703,14 @@ try {
                                 <!-- Product Info -->
                                 <div class="p-5">
                                     <h3 class="font-bold text-gray-800 text-lg mb-2 truncate">
-                                        <?php echo htmlspecialchars($product['product_name']); ?>
+                                        <?php echo htmlspecialchars($product['name'] ?? 'Unnamed Product'); ?>
                                     </h3>
                                     
                                     <p class="text-gray-600 text-sm mb-4 line-clamp-2 h-10">
                                         <?php echo htmlspecialchars($product['description'] ?? 'No description available'); ?>
                                     </p>
                                     
-                                    <!-- Store Info (instead of farmer) -->
+                                    <!-- Store Info -->
                                     <div class="flex items-center mb-4">
                                         <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center mr-3">
                                             <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -673,20 +727,20 @@ try {
                                     <div class="flex items-center justify-between">
                                         <div class="text-sm">
                                             <span class="text-gray-500">Stock:</span>
-                                            <span class="font-medium ml-1 <?php echo $is_low_stock ? 'text-red-600' : 'text-green-600'; ?>">
-                                                <?php echo $product['stock']; ?> available
+                                            <span class="font-medium ml-1 <?php echo ($product['stock_quantity'] ?? 0) < 10 ? 'text-red-600' : 'text-green-600'; ?>">
+                                                <?php echo $product['stock_quantity'] ?? 0; ?> available
                                             </span>
                                         </div>
                                         
                                         <!-- Add to Cart Form -->
                                         <form method="POST" action="" class="flex items-center space-x-2">
-                                            <input type="hidden" name="product_id" value="<?php echo $product['id']; ?>">
+                                            <input type="hidden" name="product_id" value="<?php echo $product['id'] ?? 0; ?>">
                                             <div class="relative">
                                                 <input type="number" 
                                                        name="quantity" 
                                                        value="1" 
                                                        min="1" 
-                                                       max="<?php echo min($product['stock'], 10); ?>"
+                                                       max="<?php echo isset($product['stock_quantity']) ? min($product['stock_quantity'], 10) : 1; ?>"
                                                        class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm">
                                             </div>
                                             <button type="submit" 
@@ -702,11 +756,11 @@ try {
                                     
                                     <!-- Quick Actions -->
                                     <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between">
-                                        <button onclick="showProductDetails(<?php echo $product['id']; ?>)" 
+                                        <button onclick="showProductDetails(<?php echo $product['id'] ?? 0; ?>)" 
                                                 class="text-sm text-[#10854d] hover:underline">
                                             View Details
                                         </button>
-                                        <?php if ($product['category']): ?>
+                                        <?php if (!empty($product['category'])): ?>
                                             <a href="?category=<?php echo urlencode($product['category']); ?>" 
                                                class="text-sm text-gray-600 hover:text-[#10854d]">
                                                 More <?php echo htmlspecialchars($product['category']); ?>

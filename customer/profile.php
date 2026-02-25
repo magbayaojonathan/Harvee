@@ -131,17 +131,17 @@ $stmt->execute([$user_id]);
 $stats['total_orders'] = $stmt->fetch()['total'];
 
 // Total spent
-$stmt = $pdo->prepare("SELECT SUM(total) as total FROM orders WHERE customer_id = ? AND status != 'cancelled'");
+$stmt = $pdo->prepare("SELECT SUM(total) as total FROM orders WHERE customer_id = ? AND order_status != 'cancelled'");
 $stmt->execute([$user_id]);
 $stats['total_spent'] = $stmt->fetch()['total'] ?? 0;
 
 // Pending orders
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM orders WHERE customer_id = ? AND status = 'pending'");
+$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM orders WHERE customer_id = ? AND order_status = 'pending'");
 $stmt->execute([$user_id]);
 $stats['pending_orders'] = $stmt->fetch()['total'];
 
 // Completed orders
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM orders WHERE customer_id = ? AND status = 'completed'");
+$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM orders WHERE customer_id = ? AND order_status = 'delivered'");
 $stmt->execute([$user_id]);
 $stats['completed_orders'] = $stmt->fetch()['total'];
 

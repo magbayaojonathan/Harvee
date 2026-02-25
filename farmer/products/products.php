@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../config/database.php';
+
 // Check if user is logged in as farmer/admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION['role'] !== 'admin')) {
     header('Location: ../auth/login.php');
@@ -10,7 +11,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION
 $user_id = $_SESSION['user_id'];
 $message = '';
 
-// Handle actions (delete, update stock)
+// Handle actions (delete, update stock, update price)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Delete product
     if (isset($_POST['delete_product'])) {
@@ -47,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $check_stmt->execute([$product_id, $user_id]);
                 
                 if ($check_stmt->fetch()) {
-                    $update_stmt = $pdo->prepare("UPDATE products SET stock = ? WHERE id = ?");
+                    $update_stmt = $pdo->prepare("UPDATE products SET stock_quantity = ? WHERE id = ?");
                     $update_stmt->execute([$new_stock, $product_id]);
                     $message = "✓ Stock updated successfully!";
                 } else {
@@ -86,56 +87,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Get search and filter parameters
 $search = $_GET['search'] ?? '';
-$category = $_GET['category'] ?? '';
+$category_filter = $_GET['category'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
 $stock_filter = $_GET['stock'] ?? '';
 
-// Build query
-$sql = "SELECT * FROM products WHERE farmer_id = ?";
+// Build query with JOIN to get category name
+$sql = "SELECT p.*, c.name as category_name 
+        FROM products p 
+        LEFT JOIN categories c ON p.category_id = c.id 
+        WHERE p.farmer_id = ?";
 $params = [$user_id];
 
 if (!empty($search)) {
-    $sql .= " AND (product_name LIKE ? OR description LIKE ?)";
+    $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
     $search_term = "%$search%";
     $params[] = $search_term;
     $params[] = $search_term;
 }
 
-if (!empty($category)) {
-    $sql .= " AND category = ?";
-    $params[] = $category;
+if (!empty($category_filter)) {
+    $sql .= " AND c.name = ?";
+    $params[] = $category_filter;
 }
 
 if ($stock_filter === 'low') {
-    $sql .= " AND stock < 10";
+    $sql .= " AND p.stock_quantity < 10 AND p.stock_quantity > 0";
 } elseif ($stock_filter === 'out') {
-    $sql .= " AND stock = 0";
+    $sql .= " AND p.stock_quantity = 0";
 } elseif ($stock_filter === 'in') {
-    $sql .= " AND stock > 0";
+    $sql .= " AND p.stock_quantity > 0";
 }
 
 // Apply sorting
 switch ($sort) {
     case 'name_asc':
-        $sql .= " ORDER BY product_name ASC";
+        $sql .= " ORDER BY p.name ASC";
         break;
     case 'name_desc':
-        $sql .= " ORDER BY product_name DESC";
+        $sql .= " ORDER BY p.name DESC";
         break;
     case 'price_low':
-        $sql .= " ORDER BY price ASC";
+        $sql .= " ORDER BY p.price ASC";
         break;
     case 'price_high':
-        $sql .= " ORDER BY price DESC";
+        $sql .= " ORDER BY p.price DESC";
         break;
     case 'stock_low':
-        $sql .= " ORDER BY stock ASC";
+        $sql .= " ORDER BY p.stock_quantity ASC";
         break;
     case 'stock_high':
-        $sql .= " ORDER BY stock DESC";
+        $sql .= " ORDER BY p.stock_quantity DESC";
         break;
     default:
-        $sql .= " ORDER BY created_at DESC";
+        $sql .= " ORDER BY p.created_at DESC";
 }
 
 // Get products
@@ -152,24 +156,26 @@ $in_stock_count = 0;
 $total_stock_value = 0;
 
 foreach ($products as $product) {
-    if ($product['stock'] == 0) {
+    $stock = $product['stock_quantity'] ?? 0;
+    if ($stock == 0) {
         $out_of_stock_count++;
-    } elseif ($product['stock'] < 10) {
+    } elseif ($stock < 10) {
         $low_stock_count++;
     } else {
         $in_stock_count++;
     }
-    $total_stock_value += $product['price'] * $product['stock'];
+    $total_stock_value += ($product['price'] ?? 0) * $stock;
 }
 
 // Get unique categories for filter
 $categories = [];
-foreach ($products as $product) {
-    if (!empty($product['category']) && !in_array($product['category'], $categories)) {
-        $categories[] = $product['category'];
-    }
+try {
+    $cat_stmt = $pdo->prepare("SELECT DISTINCT name FROM categories WHERE is_active = 1 ORDER BY name");
+    $cat_stmt->execute();
+    $categories = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $e) {
+    $categories = ['Vegetables', 'Fruits', 'Grains', 'Poultry', 'Dairy'];
 }
-sort($categories);
 ?>
 
 <!DOCTYPE html>
@@ -226,7 +232,7 @@ sort($categories);
             <div class="flex justify-between items-center py-4">
                 <!-- Logo and Brand -->
                 <div class="flex items-center space-x-4">
-                    <a href="dashboard.php" class="flex items-center space-x-2">
+                    <a href="../dashboard.php" class="flex items-center space-x-2">
                         <svg class="w-8 h-8 text-[#10854d]" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
                         </svg>
@@ -240,7 +246,7 @@ sort($categories);
                 
                 <!-- User Menu -->
                 <div class="flex items-center space-x-4">
-                    <a href="add.php" class="px-4 py-2 bg-[#10854d] text-white rounded-lg hover:bg-[#0d6e40] transition-colors">
+                    <a href="../add.php" class="px-4 py-2 bg-[#10854d] text-white rounded-lg hover:bg-[#0d6e40] transition-colors">
                         <i class="fas fa-plus mr-2"></i> Add New
                     </a>
                     
@@ -248,11 +254,11 @@ sort($categories);
                         <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
                             <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center">
                                 <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($_SESSION['first_name'], 0, 1)); ?>
+                                    <?php echo strtoupper(substr($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'F', 0, 1)); ?>
                                 </span>
                             </div>
                             <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($_SESSION['first_name']); ?>
+                                <?php echo htmlspecialchars($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'Farmer'); ?>
                             </span>
                             <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -261,20 +267,20 @@ sort($categories);
                         
                         <!-- Dropdown Menu -->
                         <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 hidden group-hover:block">
-                            <a href="dashboard.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                            <a href="../dashboard.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
                             </a>
-                            <a href="add.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                            <a href="../add.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-plus-circle mr-2"></i> Add Product
                             </a>
                             <a href="products.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-boxes mr-2"></i> Manage Products
                             </a>
-                            <a href="orders.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                            <a href="../orders.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-shopping-bag mr-2"></i> View Orders
                             </a>
                             <div class="border-t border-gray-200 my-1"></div>
-                            <a href="../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
+                            <a href="../../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
                                 <i class="fas fa-sign-out-alt mr-2"></i> Logout
                             </a>
                         </div>
@@ -376,7 +382,7 @@ sort($categories);
                         <select name="category" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
                             <option value="">All Categories</option>
                             <?php foreach ($categories as $cat): ?>
-                                <option value="<?php echo htmlspecialchars($cat); ?>" <?php echo ($category == $cat) ? 'selected' : ''; ?>>
+                                <option value="<?php echo htmlspecialchars($cat); ?>" <?php echo ($category_filter == $cat) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($cat); ?>
                                 </option>
                             <?php endforeach; ?>
@@ -412,7 +418,7 @@ sort($categories);
                             class="px-6 py-2 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                         Apply Filters
                     </button>
-                    <?php if ($search || $category || $stock_filter): ?>
+                    <?php if ($search || $category_filter || $stock_filter): ?>
                         <a href="products.php" 
                            class="px-6 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
                             Clear Filters
@@ -434,7 +440,7 @@ sort($categories);
                     </div>
                     <h3 class="text-xl font-bold text-gray-700 mb-3">No products found</h3>
                     <p class="text-gray-500 mb-6 max-w-md mx-auto">
-                        <?php if ($search || $category || $stock_filter): ?>
+                        <?php if ($search || $category_filter || $stock_filter): ?>
                             Try adjusting your filters or 
                             <a href="products.php" class="text-[#10854d] hover:underline">clear all filters</a>.
                         <?php else: ?>
@@ -461,13 +467,14 @@ sort($categories);
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach ($products as $product): 
+                                $stock = $product['stock_quantity'] ?? 0;
                                 $stock_class = '';
                                 $stock_status = '';
                                 
-                                if ($product['stock'] == 0) {
+                                if ($stock == 0) {
                                     $stock_class = 'stock-out';
                                     $stock_status = 'Out of Stock';
-                                } elseif ($product['stock'] < 10) {
+                                } elseif ($stock < 10) {
                                     $stock_class = 'stock-low';
                                     $stock_status = 'Low Stock';
                                 } else {
@@ -482,7 +489,7 @@ sort($categories);
                                                 <i class="fas fa-seedling text-gray-400"></i>
                                             </div>
                                             <div>
-                                                <h4 class="font-medium text-gray-800"><?php echo htmlspecialchars($product['product_name']); ?></h4>
+                                                <h4 class="font-medium text-gray-800"><?php echo htmlspecialchars($product['name'] ?? 'Unnamed Product'); ?></h4>
                                                 <p class="text-xs text-gray-500 truncate max-w-xs">
                                                     <?php echo htmlspecialchars(substr($product['description'] ?? 'No description', 0, 50)); ?>...
                                                 </p>
@@ -491,22 +498,22 @@ sort($categories);
                                     </td>
                                     <td class="py-4 px-6">
                                         <span class="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
-                                            <?php echo htmlspecialchars($product['category'] ?? 'Uncategorized'); ?>
+                                            <?php echo htmlspecialchars($product['category_name'] ?? 'Uncategorized'); ?>
                                         </span>
                                     </td>
                                     <td class="py-4 px-6">
-                                        <span class="font-bold text-[#10854d]">₱<?php echo number_format($product['price'], 2); ?></span>
-                                        <button onclick="openEditPriceModal(<?php echo $product['id']; ?>, <?php echo $product['price']; ?>)" 
+                                        <span class="font-bold text-[#10854d]">₱<?php echo number_format($product['price'] ?? 0, 2); ?></span>
+                                        <button onclick="openEditPriceModal(<?php echo $product['id']; ?>, <?php echo $product['price'] ?? 0; ?>)" 
                                                 class="ml-2 text-gray-400 hover:text-[#10854d] text-sm">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                     </td>
                                     <td class="py-4 px-6">
                                         <div class="flex items-center">
-                                            <span class="font-medium <?php echo $product['stock'] == 0 ? 'text-red-600' : ($product['stock'] < 10 ? 'text-yellow-600' : 'text-green-600'); ?>">
-                                                <?php echo $product['stock']; ?>
+                                            <span class="font-medium <?php echo $stock == 0 ? 'text-red-600' : ($stock < 10 ? 'text-yellow-600' : 'text-green-600'); ?>">
+                                                <?php echo $stock; ?>
                                             </span>
-                                            <button onclick="openEditStockModal(<?php echo $product['id']; ?>, <?php echo $product['stock']; ?>)" 
+                                            <button onclick="openEditStockModal(<?php echo $product['id']; ?>, <?php echo $stock; ?>)" 
                                                     class="ml-2 text-gray-400 hover:text-[#10854d] text-sm">
                                                 <i class="fas fa-edit"></i>
                                             </button>
@@ -514,8 +521,8 @@ sort($categories);
                                     </td>
                                     <td class="py-4 px-6">
                                         <span class="px-3 py-1 text-xs rounded-full 
-                                            <?php echo $product['stock'] == 0 ? 'bg-red-100 text-red-800' : 
-                                                   ($product['stock'] < 10 ? 'bg-yellow-100 text-yellow-800' : 
+                                            <?php echo $stock == 0 ? 'bg-red-100 text-red-800' : 
+                                                   ($stock < 10 ? 'bg-yellow-100 text-yellow-800' : 
                                                    'bg-green-100 text-green-800'); ?>">
                                             <?php echo $stock_status; ?>
                                         </span>
@@ -552,8 +559,8 @@ sort($categories);
                     <div class="flex flex-col md:flex-row justify-between items-center">
                         <div class="text-sm text-gray-600 mb-4 md:mb-0">
                             Showing <?php echo count($products); ?> product(s)
-                            <?php if ($category): ?>
-                                in <span class="font-medium"><?php echo htmlspecialchars($category); ?></span>
+                            <?php if ($category_filter): ?>
+                                in <span class="font-medium"><?php echo htmlspecialchars($category_filter); ?></span>
                             <?php endif; ?>
                         </div>
                         <div class="flex items-center space-x-4">

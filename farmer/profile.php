@@ -24,18 +24,22 @@ $user = $stmt->fetch();
 // Handle profile update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_profile'])) {
-        $name = trim($_POST['name'] ?? '');
+        $first_name = trim($_POST['first_name'] ?? '');
+        $last_name = trim($_POST['last_name'] ?? '');
+        $name = $first_name . ' ' . $last_name;
         $email = trim($_POST['email'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['address'] ?? '');
-        $farm_name = trim($_POST['farm_name'] ?? '');
-        $farm_description = trim($_POST['farm_description'] ?? '');
         
         // Validation
         $errors = [];
         
-        if (empty($name)) {
-            $errors[] = "Name is required";
+        if (empty($first_name)) {
+            $errors[] = "First name is required";
+        }
+        
+        if (empty($last_name)) {
+            $errors[] = "Last name is required";
         }
         
         if (empty($email)) {
@@ -55,16 +59,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($errors)) {
             try {
-                // You might want to add farm_name and farm_description to users table
-                // For now, we'll just update the basic info
                 $stmt = $pdo->prepare("
                     UPDATE users 
-                    SET name = ?, email = ?, phone = ?, address = ? 
+                    SET first_name = ?, last_name = ?, name = ?, email = ?, phone = ?, address = ? 
                     WHERE id = ?
                 ");
-                $stmt->execute([$name, $email, $phone, $address, $user_id]);
+                $stmt->execute([$first_name, $last_name, $name, $email, $phone, $address, $user_id]);
                 
-                // Update session name
+                // Update session
+                $_SESSION['first_name'] = $first_name;
+                $_SESSION['last_name'] = $last_name;
                 $_SESSION['name'] = $name;
                 
                 $message = "Profile updated successfully!";
@@ -132,51 +136,49 @@ $stats = [];
 // Total products listed
 $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM products WHERE farmer_id = ?");
 $stmt->execute([$user_id]);
-$stats['total_products'] = $stmt->fetch()['total'];
+$stats['total_products'] = $stmt->fetch()['total'] ?? 0;
 
 // Total orders received (through their products)
 $stmt = $pdo->prepare("
     SELECT COUNT(DISTINCT oi.order_id) as total 
     FROM order_items oi 
-    JOIN products p ON oi.product_id = p.id 
-    WHERE p.farmer_id = ?
+    WHERE oi.farmer_id = ?
 ");
 $stmt->execute([$user_id]);
-$stats['total_orders'] = $stmt->fetch()['total'];
+$stats['total_orders'] = $stmt->fetch()['total'] ?? 0;
 
-// Total revenue
+// Total revenue - FIXED: using unit_price and total_price
 $stmt = $pdo->prepare("
-    SELECT SUM(oi.quantity * oi.price) as total 
+    SELECT SUM(oi.total_price) as total 
     FROM order_items oi 
-    JOIN products p ON oi.product_id = p.id 
-    WHERE p.farmer_id = ?
+    WHERE oi.farmer_id = ?
 ");
 $stmt->execute([$user_id]);
 $stats['total_revenue'] = $stmt->fetch()['total'] ?? 0;
 
-// Pending orders
+// Pending orders - FIXED: using order_status column
 $stmt = $pdo->prepare("
     SELECT COUNT(DISTINCT oi.order_id) as total 
     FROM order_items oi 
-    JOIN products p ON oi.product_id = p.id 
     JOIN orders o ON oi.order_id = o.id
-    WHERE p.farmer_id = ? AND o.status = 'pending'
+    WHERE oi.farmer_id = ? AND o.order_status = 'pending'
 ");
 $stmt->execute([$user_id]);
-$stats['pending_orders'] = $stmt->fetch()['total'];
+$stats['pending_orders'] = $stmt->fetch()['total'] ?? 0;
 
-// Low stock products (less than 10 items)
+// Low stock products (less than 10 items) - FIXED: using stock_quantity
 $stmt = $pdo->prepare("
     SELECT COUNT(*) as total 
     FROM products 
-    WHERE farmer_id = ? AND stock < 10
+    WHERE farmer_id = ? AND stock_quantity < 10
 ");
 $stmt->execute([$user_id]);
-$stats['low_stock'] = $stmt->fetch()['total'];
+$stats['low_stock'] = $stmt->fetch()['total'] ?? 0;
 
-// Get recent products
+// Get recent products - FIXED: using correct column names
 $stmt = $pdo->prepare("
-    SELECT * FROM products 
+    SELECT id, name, price, stock_quantity, created_at 
+    FROM products 
     WHERE farmer_id = ? 
     ORDER BY created_at DESC 
     LIMIT 5
@@ -184,17 +186,17 @@ $stmt = $pdo->prepare("
 $stmt->execute([$user_id]);
 $recent_products = $stmt->fetchAll();
 
-// Get recent orders for farmer's products
+// Get recent orders for farmer's products - FIXED: using correct column names
 $stmt = $pdo->prepare("
-    SELECT o.id as order_id, o.created_at, o.status,
-           oi.quantity, oi.price,
-           p.product_name,
-           u.name as customer_name
+    SELECT o.id as order_id, o.created_at, o.order_status as status,
+           oi.quantity, oi.unit_price, oi.total_price,
+           p.name as product_name,
+           u.first_name, u.last_name
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     JOIN products p ON oi.product_id = p.id
     JOIN users u ON o.customer_id = u.id
-    WHERE p.farmer_id = ?
+    WHERE oi.farmer_id = ?
     ORDER BY o.created_at DESC
     LIMIT 5
 ");
@@ -216,7 +218,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
+            background: linear-gradient(135deg, #f6f9f8 0%, #f0f7f3 100%);
         }
         .profile-sidebar {
             background: linear-gradient(135deg, #10854d 0%, #0d6e40 100%);
@@ -234,6 +236,18 @@ $member_since = date('F Y', strtotime($user['created_at']));
         .product-item:hover, .order-item:hover {
             background-color: #f9fafb;
         }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-confirmed { background: #dbeafe; color: #1e40af; }
+        .status-processing { background: #e0f2fe; color: #0369a1; }
+        .status-shipped { background: #c7d2fe; color: #3730a3; }
+        .status-delivered { background: #dcfce7; color: #166534; }
+        .status-cancelled { background: #fee2e2; color: #991b1b; }
     </style>
 </head>
 <body>
@@ -281,10 +295,10 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="p-6 text-center text-white">
                         <div class="w-24 h-24 bg-white rounded-full mx-auto mb-4 flex items-center justify-center">
                             <span class="text-3xl font-bold text-[#10854d]">
-                                <?php echo strtoupper(substr($user['name'], 0, 1)); ?>
+                                <?php echo strtoupper(substr($user['first_name'] ?? $user['name'] ?? 'F', 0, 1)); ?>
                             </span>
                         </div>
-                        <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['name']); ?></h2>
+                        <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['first_name'] ?? $user['name'] ?? 'Farmer'); ?></h2>
                         <p class="text-green-100 text-sm mb-2">Farmer</p>
                         <p class="text-green-100 text-sm mb-4">Member since <?php echo $member_since; ?></p>
                         
@@ -305,13 +319,13 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="bg-white p-4">
                         <h3 class="font-semibold text-gray-700 mb-3">Farm Management</h3>
                         <div class="space-y-2">
-                            <a href="products.php" class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <a href="products/products.php" class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                 <svg class="w-5 h-5 text-[#10854d] mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                                 </svg>
                                 <span class="text-gray-700">Manage Products</span>
                             </a>
-                            <a href="add_product.php" class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <a href="products/add.php" class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                 <svg class="w-5 h-5 text-[#10854d] mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                                 </svg>
@@ -344,28 +358,20 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     
                     <form method="POST" action="" class="p-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="md:col-span-2">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Farm/Business Name</label>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                                 <input type="text" 
-                                       name="farm_name" 
-                                       value="<?php echo htmlspecialchars($user['name']); ?>"
+                                       name="first_name" 
+                                       value="<?php echo htmlspecialchars($user['first_name'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
-                                       placeholder="e.g., Green Valley Farm">
-                            </div>
-                            
-                            <div class="md:col-span-2">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Farm Description</label>
-                                <textarea name="farm_description" 
-                                          rows="3"
-                                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
-                                          placeholder="Tell customers about your farm, your growing practices, etc."><?php echo htmlspecialchars($user['description'] ?? ''); ?></textarea>
+                                       required>
                             </div>
                             
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Owner/Contact Name</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                                 <input type="text" 
-                                       name="name" 
-                                       value="<?php echo htmlspecialchars($user['name']); ?>"
+                                       name="last_name" 
+                                       value="<?php echo htmlspecialchars($user['last_name'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
@@ -489,12 +495,12 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                 <?php foreach ($recent_products as $product): ?>
                                 <div class="product-item flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                     <div>
-                                        <span class="font-medium text-gray-800"><?php echo htmlspecialchars($product['product_name']); ?></span>
-                                        <span class="text-sm text-gray-500 ml-2">Stock: <?php echo $product['stock']; ?></span>
+                                        <span class="font-medium text-gray-800"><?php echo htmlspecialchars($product['name']); ?></span>
+                                        <span class="text-sm text-gray-500 ml-2">Stock: <?php echo $product['stock_quantity']; ?></span>
                                     </div>
                                     <div class="flex items-center space-x-4">
                                         <span class="font-bold text-[#10854d]">₱<?php echo number_format($product['price'], 2); ?></span>
-                                        <a href="edit_product.php?id=<?php echo $product['id']; ?>" class="text-blue-600 hover:text-blue-800">
+                                        <a href="products/edit.php?id=<?php echo $product['id']; ?>" class="text-blue-600 hover:text-blue-800">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                             </svg>
@@ -517,15 +523,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                         <div>
                                             <div class="flex items-center space-x-2 mb-1">
                                                 <span class="font-medium text-gray-800">Order #<?php echo str_pad($order['order_id'], 8, '0', STR_PAD_LEFT); ?></span>
-                                                <span class="px-2 py-1 text-xs rounded-full 
-                                                    <?php
-                                                    switch($order['status']) {
-                                                        case 'pending': echo 'bg-yellow-100 text-yellow-800'; break;
-                                                        case 'paid': echo 'bg-blue-100 text-blue-800'; break;
-                                                        case 'shipped': echo 'bg-sky-100 text-sky-800'; break;
-                                                        case 'completed': echo 'bg-green-100 text-green-800'; break;
-                                                    }
-                                                    ?>">
+                                                <span class="status-badge status-<?php echo $order['status']; ?>">
                                                     <?php echo ucfirst($order['status']); ?>
                                                 </span>
                                             </div>
@@ -533,12 +531,12 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                                 <?php echo htmlspecialchars($order['product_name']); ?> × <?php echo $order['quantity']; ?>
                                             </p>
                                             <p class="text-xs text-gray-500">
-                                                Customer: <?php echo htmlspecialchars($order['customer_name']); ?> • 
+                                                Customer: <?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?> • 
                                                 <?php echo date('M j, Y', strtotime($order['created_at'])); ?>
                                             </p>
                                         </div>
                                         <div class="text-right">
-                                            <span class="font-bold text-[#10854d]">₱<?php echo number_format($order['price'] * $order['quantity'], 2); ?></span>
+                                            <span class="font-bold text-[#10854d]">₱<?php echo number_format($order['total_price'], 2); ?></span>
                                         </div>
                                     </div>
                                 </div>

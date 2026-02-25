@@ -57,8 +57,8 @@ $base = str_repeat('../', max(0, $depth));
             <?php else: ?>
                 <!-- Guest navigationtytgfgfgffg -->
                 <li><a href="<?php echo $base; ?>customer/browse.php"><i class="fas fa-search"></i> Browse Products</a></li>
-                <li><a href="<?php echo $base; ?>../auth/login.php" class="login-btn"><i class="fas fa-sign-in-alt"></i> Login</a></li>
-                <li><a href="<?php echo $base; ?>../auth/register.php" class="register-btn"><i class="fas fa-user-plus"></i> Register</a></li>
+                <li><a href="<?php echo $base; ?>../harvee/auth/login.php" class="login-btn"><i class="fas fa-sign-in-alt"></i> Login</a></li>
+                <li><a href="<?php echo $base; ?>harvee/auth/register.php" class="register-btn"><i class="fas fa-user-plus"></i> Register</a></li>
             <?php endif; ?>
         </ul>
     </div>

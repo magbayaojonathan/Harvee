@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $product = $stmt->fetch();
             
             if ($product) {
-                if ($product['stock'] >= $quantity) {
+                if ($product['stock_quantity'] >= $quantity) {
                     // Check if item already in cart
                     $stmt = $pdo->prepare("SELECT * FROM cart WHERE user_id = ? AND product_id = ?");
                     $stmt->execute([$user_id, $product_id]);
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($existing_item) {
                         // Update quantity
                         $new_quantity = $existing_item['quantity'] + $quantity;
-                        if ($new_quantity <= $product['stock']) {
+                        if ($new_quantity <= $product['stock_quantity']) {
                             $stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ?");
                             $stmt->execute([$new_quantity, $existing_item['id']]);
                             $message = "Cart updated successfully!";
@@ -45,12 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     } else {
                         // Add new item
-                        $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)");
-                        $stmt->execute([$user_id, $product_id, $quantity]);
+                        $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity, price_at_time) VALUES (?, ?, ?, ?)");
+                        $stmt->execute([$user_id, $product_id, $quantity, $product['price']]);
                         $message = "Product added to cart!";
                     }
                 } else {
-                    $message = "Not enough stock available! Only " . $product['stock'] . " items left.";
+                    $message = "Not enough stock available! Only " . $product['stock_quantity'] . " items left.";
                 }
             } else {
                 $message = "Product not found!";
@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     // Check stock availability
                     $stmt = $pdo->prepare("
-                        SELECT p.stock 
+                        SELECT p.stock_quantity as stock 
                         FROM cart c 
                         JOIN products p ON c.product_id = p.id 
                         WHERE c.id = ? AND c.user_id = ?
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $item = $stmt->fetch();
                     
                     if ($item && $quantity <= $item['stock']) {
-                        // Update quantity
+                        // Update quantity in cart
                         $stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?");
                         $stmt->execute([$quantity, $cart_id, $user_id]);
                     }
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Get cart items with product details
             $stmt = $pdo->prepare("
-                SELECT c.*, p.product_name, p.price, p.stock 
+                SELECT c.*, p.name as product_name, p.price, p.stock_quantity as stock, p.farmer_id
                 FROM cart c 
                 JOIN products p ON c.product_id = p.id 
                 WHERE c.user_id = ?
@@ -141,18 +141,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Create order
-            $stmt = $pdo->prepare("INSERT INTO orders (customer_id, total, status) VALUES (?, ?, 'pending')");
+            $stmt = $pdo->prepare("INSERT INTO orders (customer_id, total, order_status) VALUES (?, ?, 'pending')");
             $stmt->execute([$user_id, $order_total]);
             $order_id = $pdo->lastInsertId();
             
             // Create order items and update stock
             foreach ($cart_items_checkout as $item) {
                 // Add to order items
-                $stmt = $pdo->prepare("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$order_id, $item['product_id'], $item['quantity'], $item['price']]);
+                $stmt = $pdo->prepare("
+                    INSERT INTO order_items 
+                    (order_id, product_id, farmer_id, product_name, quantity, unit_price, total_price) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                
+                $stmt->execute([
+                    $order_id, 
+                    $item['product_id'], 
+                    $item['farmer_id'],
+                    $item['product_name'],
+                    $item['quantity'], 
+                    $item['price'],
+                    $item['quantity'] * $item['price']
+                ]);
                 
                 // Update product stock
-                $stmt = $pdo->prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?");
                 $stmt->execute([$item['quantity'], $item['product_id']]);
             }
             
@@ -178,21 +191,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get cart items for display
-$stmt = $pdo->prepare("
-    SELECT c.id as cart_id, c.quantity, 
-           p.id as product_id, p.product_name, p.price, p.description, p.stock,
-           u.first_name as farmer_first, u.last_name as farmer_last
-    FROM cart c 
-    JOIN products p ON c.product_id = p.id 
-    JOIN users u ON p.farmer_id = u.id 
-    WHERE c.user_id = ?
-    ORDER BY c.created_at DESC
-");
-$stmt->execute([$user_id]);
-$cart_items = $stmt->fetchAll();
+// Get cart items for display with farmer info
+try {
+    error_log("=== CART.PHP DEBUG ===");
+    error_log("User ID: " . $user_id);
+    
+    // First, check if there are any cart items at all
+    $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ?");
+    $check_stmt->execute([$user_id]);
+    $count = $check_stmt->fetchColumn();
+    
+    error_log("Cart count for user $user_id: $count");
+    
+    if ($count == 0) {
+        error_log("Cart is empty for user $user_id");
+        $cart_items = [];
+    } else {
+        error_log("Retrieving $count items from cart...");
+        
+        $stmt = $pdo->prepare("
+            SELECT c.id as cart_id, c.quantity, c.price_at_time,
+                   p.id as product_id, p.name as product_name, p.price, p.description, p.stock_quantity as stock,
+                   COALESCE(u.first_name, 'Harvee') as farmer_first, 
+                   COALESCE(u.last_name, 'Farm') as farmer_last
+            FROM cart c 
+            LEFT JOIN products p ON c.product_id = p.id 
+            LEFT JOIN users u ON p.farmer_id = u.id 
+            WHERE c.user_id = ?
+            ORDER BY c.id DESC
+        ");
+        $stmt->execute([$user_id]);
+        $cart_items = $stmt->fetchAll();
+        
+        error_log("Retrieved " . count($cart_items) . " items");
+        foreach ($cart_items as $idx => $item) {
+            error_log("  Item $idx: product_id={$item['product_id']}, name={$item['product_name']}, qty={$item['quantity']}");
+        }
+    }
+    
+} catch (PDOException $e) {
+    error_log("Cart query error: " . $e->getMessage());
+    error_log("Error code: " . $e->getCode());
+    $cart_items = [];
+    $message = "⚠ Error loading cart items. Please refresh the page.";
+}
 
 // Calculate total
+$total_amount = 0;
 foreach ($cart_items as $item) {
     $total_amount += $item['quantity'] * $item['price'];
 }
@@ -343,7 +388,7 @@ foreach ($cart_items as $item) {
                                 <?php foreach ($cart_items as $index => $item): 
                                     $item_total = $item['quantity'] * $item['price'];
                                     $is_low_stock = $item['stock'] < 5;
-                                    $max_quantity = min($item['stock'], 20); // Limit to 20 or available stock
+                                    $max_quantity = min($item['stock'], 20);
                                 ?>
                                     <div class="p-6 cart-item">
                                         <div class="flex flex-col md:flex-row gap-6">
@@ -661,17 +706,7 @@ foreach ($cart_items as $item) {
         function confirmCheckout() {
             return confirm('Proceed to checkout?\n\nYou will be redirected to complete your order.');
         }
-        
-        // Auto-update cart when quantity changes (optional)
-        document.addEventListener('DOMContentLoaded', function() {
-            const quantityInputs = document.querySelectorAll('.quantity-input');
-            quantityInputs.forEach(input => {
-                input.addEventListener('change', function() {
-                    // Optional: Auto-submit form when quantity changes
-                    // document.getElementById('cartForm').submit();
-                });
-            });
-        });
     </script>
 </body>
 </html>
+<!-- END OF FILE - NO MORE PHP AFTER THIS -->
