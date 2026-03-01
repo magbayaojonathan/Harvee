@@ -14,17 +14,17 @@ $message_type = '';
 
 // Handle order cancellation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_order'])) {
-    $order_id = $_POST['order_id'] ?? 0;
+    $order_id = (int)($_POST['order_id'] ?? 0);
     
     try {
         // Check if order can be cancelled (only pending orders)
-        $stmt = $pdo->prepare("SELECT status FROM orders WHERE id = ? AND customer_id = ?");
+        $stmt = $pdo->prepare("SELECT order_status FROM orders WHERE id = ? AND customer_id = ?");
         $stmt->execute([$order_id, $user_id]);
         $order = $stmt->fetch();
         
-        if ($order && $order['status'] === 'pending') {
+        if ($order && $order['order_status'] === 'pending') {
             // Update order status to cancelled
-            $stmt = $pdo->prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND customer_id = ?");
+            $stmt = $pdo->prepare("UPDATE orders SET order_status = 'cancelled' WHERE id = ? AND customer_id = ?");
             $stmt->execute([$order_id, $user_id]);
             
             // Restore product stock
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_order'])) {
             $order_items = $stmt->fetchAll();
             
             foreach ($order_items as $item) {
-                $stmt = $pdo->prepare("UPDATE products SET stock = stock + ? WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?");
                 $stmt->execute([$item['quantity'], $item['product_id']]);
             }
             
@@ -59,16 +59,20 @@ $filter = $_GET['filter'] ?? 'all';
 // Build query based on filter
 $query = "
     SELECT o.*, 
-           COUNT(oi.id) as item_count,
-           u.name as customer_name
+           COUNT(oi.id) as item_count
     FROM orders o
-    JOIN users u ON o.customer_id = u.id
     LEFT JOIN order_items oi ON o.id = oi.order_id
     WHERE o.customer_id = ?
 ";
 
 if ($filter !== 'all') {
-    $query .= " AND o.status = :status";
+    if ($filter === 'paid') {
+        $query .= " AND o.payment_status = 'paid'";
+    } elseif ($filter === 'completed') {
+        $query .= " AND o.order_status = 'delivered'";
+    } else {
+        $query .= " AND o.order_status = ?";
+    }
 }
 
 $query .= " GROUP BY o.id ORDER BY o.created_at DESC";
@@ -76,12 +80,20 @@ $query .= " GROUP BY o.id ORDER BY o.created_at DESC";
 $stmt = $pdo->prepare($query);
 
 if ($filter !== 'all') {
-    $stmt->execute(['customer_id' => $user_id, 'status' => $filter]);
+    if ($filter === 'paid' || $filter === 'completed') {
+        $stmt->execute([$user_id]);
+    } else {
+        $stmt->execute([$user_id, $filter]);
+    }
 } else {
     $stmt->execute([$user_id]);
 }
 
 $orders = $stmt->fetchAll();
+
+$stats_stmt = $pdo->prepare("SELECT order_status, payment_status, total FROM orders WHERE customer_id = ?");
+$stats_stmt->execute([$user_id]);
+$all_orders = $stats_stmt->fetchAll();
 
 // Get order statistics
 $stats = [
@@ -94,10 +106,24 @@ $stats = [
     'total_spent' => 0
 ];
 
-foreach ($orders as $order) {
+foreach ($all_orders as $order) {
     $stats['total']++;
-    $stats[$order['status']]++;
-    if ($order['status'] !== 'cancelled') {
+    if (($order['order_status'] ?? '') === 'pending') {
+        $stats['pending']++;
+    }
+    if (($order['payment_status'] ?? '') === 'paid') {
+        $stats['paid']++;
+    }
+    if (($order['order_status'] ?? '') === 'shipped') {
+        $stats['shipped']++;
+    }
+    if (($order['order_status'] ?? '') === 'delivered') {
+        $stats['completed']++;
+    }
+    if (($order['order_status'] ?? '') === 'cancelled') {
+        $stats['cancelled']++;
+    }
+    if (($order['order_status'] ?? '') !== 'cancelled') {
         $stats['total_spent'] += $order['total'];
     }
 }
@@ -281,11 +307,10 @@ foreach ($orders as $order) {
                 <?php foreach ($orders as $order): 
                     // Get order items for this order
                     $stmt = $pdo->prepare("
-                        SELECT oi.*, p.product_name, p.farmer_id,
+                        SELECT oi.*,
                                u.name as farmer_name
                         FROM order_items oi
-                        JOIN products p ON oi.product_id = p.id
-                        JOIN users u ON p.farmer_id = u.id
+                        LEFT JOIN users u ON oi.farmer_id = u.id
                         WHERE oi.order_id = ?
                     ");
                     $stmt->execute([$order['id']]);
@@ -303,7 +328,14 @@ foreach ($orders as $order) {
                                     <span class="text-sm text-gray-500 mr-2">Status:</span>
                                     <?php
                                     $status_class = '';
-                                    switch($order['status']) {
+                                    $display_status = $order['order_status'] ?? 'pending';
+                                    if ($display_status === 'delivered') {
+                                        $display_status = 'completed';
+                                    } elseif ($display_status === 'confirmed' || $display_status === 'processing') {
+                                        $display_status = 'pending';
+                                    }
+
+                                    switch($display_status) {
                                         case 'pending':
                                             $status_class = 'status-pending';
                                             break;
@@ -322,7 +354,7 @@ foreach ($orders as $order) {
                                     }
                                     ?>
                                     <span class="status-badge <?php echo $status_class; ?>">
-                                        <?php echo ucfirst($order['status']); ?>
+                                        <?php echo ucfirst($display_status); ?>
                                     </span>
                                 </div>
                             </div>
@@ -353,10 +385,10 @@ foreach ($orders as $order) {
                                         </div>
                                         <div class="text-right">
                                             <div class="font-bold text-[#10854d]">
-                                                ₱<?php echo number_format($item['price'] * $item['quantity'], 2); ?>
+                                                ₱<?php echo number_format(($item['unit_price'] ?? 0) * ($item['quantity'] ?? 0), 2); ?>
                                             </div>
                                             <div class="text-sm text-gray-500">
-                                                ₱<?php echo number_format($item['price'], 2); ?> each
+                                                ₱<?php echo number_format($item['unit_price'] ?? 0, 2); ?> each
                                             </div>
                                         </div>
                                     </div>
@@ -386,7 +418,7 @@ foreach ($orders as $order) {
                                 
                                 <!-- Order Actions -->
                                 <div class="flex gap-2">
-                                    <?php if ($order['status'] === 'pending'): ?>
+                                    <?php if (($order['order_status'] ?? '') === 'pending'): ?>
                                         <form method="POST" action="" class="inline" onsubmit="return confirm('Are you sure you want to cancel this order?');">
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                             <button type="submit" 
@@ -397,7 +429,7 @@ foreach ($orders as $order) {
                                         </form>
                                     <?php endif; ?>
                                     
-                                    <?php if ($order['status'] === 'completed'): ?>
+                                    <?php if (($order['order_status'] ?? '') === 'delivered'): ?>
                                         <a href="rate_order.php?id=<?php echo $order['id']; ?>" 
                                            class="px-4 py-2 bg-yellow-100 text-yellow-600 rounded-full text-sm font-medium hover:bg-yellow-200 transition-colors">
                                             Rate Products

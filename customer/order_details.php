@@ -28,11 +28,13 @@ if (!$order) {
 
 // Get order items with product and farmer details
 $stmt = $pdo->prepare("
-    SELECT oi.*, p.product_name, p.description,
+    SELECT oi.*,
+           COALESCE(NULLIF(oi.product_name, ''), p.name) as display_product_name,
+           COALESCE(p.description, '') as description,
            u.id as farmer_id, u.name as farmer_name, u.email as farmer_email, u.phone as farmer_phone
     FROM order_items oi
-    JOIN products p ON oi.product_id = p.id
-    JOIN users u ON p.farmer_id = u.id
+    LEFT JOIN products p ON oi.product_id = p.id
+    LEFT JOIN users u ON oi.farmer_id = u.id
     WHERE oi.order_id = ?
 ");
 $stmt->execute([$order_id]);
@@ -41,7 +43,7 @@ $order_items = $stmt->fetchAll();
 // Calculate totals
 $subtotal = 0;
 foreach ($order_items as $item) {
-    $subtotal += $item['price'] * $item['quantity'];
+    $subtotal += ($item['unit_price'] ?? 0) * ($item['quantity'] ?? 0);
 }
 $shipping = $subtotal >= 1000 ? 0 : 50;
 $service_fee = 10;
@@ -76,7 +78,13 @@ $total = $subtotal + $shipping + $service_fee;
                     </h1>
                     <span class="px-3 py-1 rounded-full text-sm font-semibold 
                         <?php
-                        switch($order['status']) {
+                        $display_status = $order['order_status'] ?? 'pending';
+                        if ($display_status === 'delivered') {
+                            $display_status = 'completed';
+                        } elseif ($display_status === 'confirmed' || $display_status === 'processing') {
+                            $display_status = 'pending';
+                        }
+                        switch($display_status) {
                             case 'pending': echo 'bg-yellow-100 text-yellow-800'; break;
                             case 'paid': echo 'bg-blue-100 text-blue-800'; break;
                             case 'shipped': echo 'bg-sky-100 text-sky-800'; break;
@@ -84,7 +92,7 @@ $total = $subtotal + $shipping + $service_fee;
                             case 'cancelled': echo 'bg-red-100 text-red-800'; break;
                         }
                         ?>">
-                        <?php echo ucfirst($order['status']); ?>
+                        <?php echo ucfirst($display_status); ?>
                     </span>
                 </div>
                 <p class="text-gray-500 mt-1">
@@ -101,19 +109,19 @@ $total = $subtotal + $shipping + $service_fee;
                             <?php foreach ($order_items as $item): ?>
                                 <div class="flex justify-between items-start border-b border-gray-100 pb-4">
                                     <div class="flex-1">
-                                        <h3 class="font-semibold text-gray-800"><?php echo htmlspecialchars($item['product_name']); ?></h3>
+                                        <h3 class="font-semibold text-gray-800"><?php echo htmlspecialchars($item['display_product_name']); ?></h3>
                                         <p class="text-sm text-gray-500 mb-2"><?php echo htmlspecialchars($item['description']); ?></p>
                                         <div class="text-sm">
                                             <span class="text-gray-600">Farmer:</span>
                                             <span class="font-medium"><?php echo htmlspecialchars($item['farmer_name']); ?></span>
                                         </div>
                                         <div class="text-sm text-gray-500">
-                                            Quantity: <?php echo $item['quantity']; ?> × ₱<?php echo number_format($item['price'], 2); ?>
+                                            Quantity: <?php echo $item['quantity']; ?> × ₱<?php echo number_format($item['unit_price'] ?? 0, 2); ?>
                                         </div>
                                     </div>
                                     <div class="text-right">
                                         <div class="font-bold text-[#10854d]">
-                                            ₱<?php echo number_format($item['price'] * $item['quantity'], 2); ?>
+                                            ₱<?php echo number_format(($item['unit_price'] ?? 0) * ($item['quantity'] ?? 0), 2); ?>
                                         </div>
                                     </div>
                                 </div>
@@ -160,7 +168,7 @@ $total = $subtotal + $shipping + $service_fee;
 
                             <!-- Action Buttons -->
                             <div class="mt-6 space-y-3">
-                                <?php if ($order['status'] === 'pending'): ?>
+                                <?php if (($order['order_status'] ?? '') === 'pending'): ?>
                                     <form method="POST" action="orders.php" onsubmit="return confirm('Cancel this order?');">
                                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                         <button type="submit" name="cancel_order" 

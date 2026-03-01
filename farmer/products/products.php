@@ -246,7 +246,7 @@ try {
                 
                 <!-- User Menu -->
                 <div class="flex items-center space-x-4">
-                    <a href="../add.php" class="px-4 py-2 bg-[#10854d] text-white rounded-lg hover:bg-[#0d6e40] transition-colors">
+                    <a href="add.php" class="px-4 py-2 bg-[#10854d] text-white rounded-lg hover:bg-[#0d6e40] transition-colors">
                         <i class="fas fa-plus mr-2"></i> Add New
                     </a>
                     

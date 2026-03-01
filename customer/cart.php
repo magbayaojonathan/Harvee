@@ -16,9 +16,9 @@ $total_amount = 0;
 // Handle cart actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Add to Cart (from product page)
-    if (isset($_POST['add_to_cart'])) {
-        $product_id = $_POST['product_id'] ?? 0;
-        $quantity = $_POST['quantity'] ?? 1;
+    if (isset($_POST['add_to_cart']) || isset($_POST['product_id'])) {
+        $product_id = (int)($_POST['product_id'] ?? 0);
+        $quantity = (int)($_POST['quantity'] ?? 1);
         
         if ($product_id > 0 && $quantity > 0) {
             // Check if product exists and is in stock
@@ -210,13 +210,19 @@ try {
         error_log("Retrieving $count items from cart...");
         
         $stmt = $pdo->prepare("
-            SELECT c.id as cart_id, c.quantity, c.price_at_time,
-                   p.id as product_id, p.name as product_name, p.price, p.description, p.stock_quantity as stock,
-                   COALESCE(u.first_name, 'Harvee') as farmer_first, 
+            SELECT c.id as cart_id,
+                   c.quantity,
+                   c.price_at_time,
+                   COALESCE(p.id, c.product_id) as product_id,
+                   COALESCE(p.name, 'Product no longer available') as product_name,
+                   COALESCE(c.price_at_time, p.price, 0) as unit_price,
+                   COALESCE(p.description, 'This product is no longer available.') as description,
+                   COALESCE(p.stock_quantity, 0) as stock,
+                   COALESCE(u.first_name, 'Harvee') as farmer_first,
                    COALESCE(u.last_name, 'Farm') as farmer_last
-            FROM cart c 
-            LEFT JOIN products p ON c.product_id = p.id 
-            LEFT JOIN users u ON p.farmer_id = u.id 
+            FROM cart c
+            LEFT JOIN products p ON c.product_id = p.id
+            LEFT JOIN users u ON p.farmer_id = u.id
             WHERE c.user_id = ?
             ORDER BY c.id DESC
         ");
@@ -239,7 +245,7 @@ try {
 // Calculate total
 $total_amount = 0;
 foreach ($cart_items as $item) {
-    $total_amount += $item['quantity'] * $item['price'];
+    $total_amount += $item['quantity'] * $item['unit_price'];
 }
 ?>
 
@@ -386,7 +392,7 @@ foreach ($cart_items as $item) {
                             
                             <div class="divide-y divide-gray-100">
                                 <?php foreach ($cart_items as $index => $item): 
-                                    $item_total = $item['quantity'] * $item['price'];
+                                    $item_total = $item['quantity'] * $item['unit_price'];
                                     $is_low_stock = $item['stock'] < 5;
                                     $max_quantity = min($item['stock'], 20);
                                 ?>
@@ -444,7 +450,7 @@ foreach ($cart_items as $item) {
                                                     <!-- Price -->
                                                     <div class="text-right">
                                                         <div class="text-xl font-bold text-[#10854d] mb-2">
-                                                            ₱<?php echo number_format($item['price'], 2); ?>
+                                                            ₱<?php echo number_format($item['unit_price'], 2); ?>
                                                         </div>
                                                         <div class="text-sm text-gray-500">per item</div>
                                                     </div>
@@ -550,7 +556,7 @@ foreach ($cart_items as $item) {
                                         </div>
                                         <div class="text-right">
                                             <span class="font-medium">
-                                                ₱<?php echo number_format($item['quantity'] * $item['price'], 2); ?>
+                                                ₱<?php echo number_format($item['quantity'] * $item['unit_price'], 2); ?>
                                             </span>
                                         </div>
                                     </div>

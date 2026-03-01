@@ -18,10 +18,12 @@ try {
     $stmt = $pdo->prepare("
         SELECT 
             p.*,
+            c.name AS category_name,
             u.first_name,
             u.last_name,
             u.email
         FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN users u ON p.farmer_id = u.id
         WHERE p.id = ?
     ");
@@ -37,8 +39,9 @@ try {
     }
     
     // Check stock status
-    $is_low_stock = $product['stock'] < 10;
-    $is_out_of_stock = $product['stock'] == 0;
+    $stock_quantity = (int)($product['stock_quantity'] ?? 0);
+    $is_low_stock = $stock_quantity > 0 && $stock_quantity < 10;
+    $is_out_of_stock = $stock_quantity <= 0;
     
 ?>
     <div class="space-y-6">
@@ -67,9 +70,9 @@ try {
                         </span>
                     <?php endif; ?>
                     
-                    <?php if ($product['category']): ?>
+                    <?php if (!empty($product['category_name'])): ?>
                         <span class="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded-full">
-                            <?php echo htmlspecialchars($product['category']); ?>
+                            <?php echo htmlspecialchars($product['category_name']); ?>
                         </span>
                     <?php endif; ?>
                 </div>
@@ -79,7 +82,7 @@ try {
             <div class="md:w-1/2">
                 <!-- Product Name & Price -->
                 <h2 class="text-3xl font-bold text-gray-800 mb-3">
-                    <?php echo htmlspecialchars($product['product_name']); ?>
+                    <?php echo htmlspecialchars($product['name']); ?>
                 </h2>
                 
                 <div class="mb-6">
@@ -102,7 +105,7 @@ try {
                     <div class="flex justify-between items-center">
                         <span class="text-gray-700 font-medium">Available Stock</span>
                         <span class="text-2xl font-bold <?php echo $is_out_of_stock ? 'text-red-600' : 'text-green-600'; ?>">
-                            <?php echo $product['stock']; ?> units
+                            <?php echo $stock_quantity; ?> units
                         </span>
                     </div>
                 </div>
@@ -161,14 +164,14 @@ try {
         <!-- Add to Cart Form -->
         <?php if (!$is_out_of_stock): ?>
             <div class="border-t pt-6">
-                <form method="POST" action="browse.php" class="flex items-end gap-4">
+                <form method="POST" action="customer/cart.php" class="flex items-end gap-4">
                     <div class="flex-1">
                         <label class="block text-gray-700 font-medium mb-2">Quantity</label>
                         <input type="number" 
                                name="quantity" 
                                value="1" 
                                min="1" 
-                               max="<?php echo min($product['stock'], 50); ?>"
+                               max="<?php echo min($stock_quantity, 50); ?>"
                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20">
                     </div>
                     

@@ -29,8 +29,8 @@ try {
 
 // Handle Add to Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
-    $product_id = $_POST['product_id'] ?? 0;
-    $quantity = $_POST['quantity'] ?? 1;
+    $product_id = (int)($_POST['product_id'] ?? 0);
+    $quantity = (int)($_POST['quantity'] ?? 1);
     
     if ($product_id > 0 && $quantity > 0) {
         // Check if product exists and is in stock
@@ -101,6 +101,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     }
 }
 
+// Handle Add to Wishlist
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_wishlist'])) {
+    $product_id = (int)($_POST['product_id'] ?? 0);
+
+    if ($product_id > 0) {
+        try {
+            $check_product = $pdo->prepare("SELECT id FROM products WHERE id = ? LIMIT 1");
+            $check_product->execute([$product_id]);
+            if (!$check_product->fetch()) {
+                $message = "❌ Product not found.";
+            } else {
+                $check_wishlist = $pdo->prepare("SELECT id FROM wishlist WHERE user_id = ? AND product_id = ? LIMIT 1");
+                $check_wishlist->execute([$user_id, $product_id]);
+                $existing_wishlist = $check_wishlist->fetch();
+
+                if ($existing_wishlist) {
+                    $message = "ℹ️ This crop is already in your wishlist.";
+                } else {
+                    $insert_wishlist = $pdo->prepare("INSERT INTO wishlist (user_id, product_id) VALUES (?, ?)");
+                    $insert_wishlist->execute([$user_id, $product_id]);
+                    $message = "✓ Crop added to wishlist.";
+                }
+            }
+        } catch (PDOException $e) {
+            error_log("Wishlist error: " . $e->getMessage());
+            $message = "❌ Failed to add to wishlist.";
+        }
+    }
+}
+
 // Check for success message from redirect
 if (isset($_GET['success'])) {
     $message = "✓ Cart updated successfully!";
@@ -114,7 +144,7 @@ $total_pages = 1;
 try {
     // Get filter parameters
     $search = $_GET['search'] ?? '';
-    $category = $_GET['category'] ?? '';
+    $category = isset($_GET['category']) ? (int)$_GET['category'] : 0;
     $min_price = $_GET['min_price'] ?? '';
     $max_price = $_GET['max_price'] ?? '';
     $sort = $_GET['sort'] ?? 'newest';
@@ -124,8 +154,10 @@ try {
 
     // Build base query with correct column names
     $sql = "SELECT SQL_CALC_FOUND_ROWS 
-                   p.*
-            FROM products p 
+                   p.*,
+                   c.name AS category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.stock_quantity > 0";
             
     $count_sql = "SELECT COUNT(*) FROM products p WHERE p.stock_quantity > 0";
@@ -144,9 +176,9 @@ try {
         $count_params[] = $search_term;
     }
 
-    if (!empty($category)) {
-        $sql .= " AND p.category = ?";
-        $count_sql .= " AND p.category = ?";
+    if ($category > 0) {
+        $sql .= " AND p.category_id = ?";
+        $count_sql .= " AND p.category_id = ?";
         $params[] = $category;
         $count_params[] = $category;
     }
@@ -232,34 +264,27 @@ try {
 
 // Get categories for filter dropdown
 $categories = [];
+$selected_category_name = '';
 try {
-    // Check if category column exists
-    $checkStmt = $pdo->prepare("SHOW COLUMNS FROM products LIKE 'category'");
-    $checkStmt->execute();
-    $columnExists = $checkStmt->fetch();
-    
-    if ($columnExists) {
-        // Get distinct categories
-        $catStmt = $pdo->prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category");
-        $catStmt->execute();
-        $categories = $catStmt->fetchAll();
-    } else {
-        // Create sample categories if column doesn't exist
-        $categories = [
-            ['category' => 'Vegetables'],
-            ['category' => 'Fruits'],
-            ['category' => 'Grains'],
-            ['category' => 'Poultry'],
-            ['category' => 'Dairy']
-        ];
+    $catStmt = $pdo->prepare("
+        SELECT c.id, c.name
+        FROM categories c
+        WHERE c.is_active = 1
+        ORDER BY c.name
+    ");
+    $catStmt->execute();
+    $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($category > 0) {
+        foreach ($categories as $cat) {
+            if ((int)$cat['id'] === $category) {
+                $selected_category_name = $cat['name'];
+                break;
+            }
+        }
     }
 } catch (PDOException $e) {
-    // Use default categories on error
-    $categories = [
-        ['category' => 'Vegetables'],
-        ['category' => 'Fruits'],
-        ['category' => 'Grains']
-    ];
+    $categories = [];
 }
 
 // Get cart count for badge
@@ -271,6 +296,19 @@ try {
     $cart_count = $cartResult['total_items'] ?? 0;
 } catch (PDOException $e) {
     // Cart table might not exist yet
+}
+
+// Get wishlist products for quick checks in product cards
+$wishlist_product_ids = [];
+$wishlist_count = 0;
+try {
+    $wishlistStmt = $pdo->prepare("SELECT product_id FROM wishlist WHERE user_id = ?");
+    $wishlistStmt->execute([$user_id]);
+    $wishlist_product_ids = array_map('intval', array_column($wishlistStmt->fetchAll(PDO::FETCH_ASSOC), 'product_id'));
+    $wishlist_count = count($wishlist_product_ids);
+} catch (PDOException $e) {
+    $wishlist_product_ids = [];
+    $wishlist_count = 0;
 }
 ?>
 
@@ -387,6 +425,18 @@ try {
                 
                 <!-- Cart & User Menu -->
                 <div class="flex items-center space-x-4">
+                    <!-- Wishlist Button -->
+                    <a href="wishlist.php" class="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
+                        <?php if ($wishlist_count > 0): ?>
+                            <span class="absolute -top-1 -right-1 bg-pink-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                <?php echo $wishlist_count; ?>
+                            </span>
+                        <?php endif; ?>
+                    </a>
+
                     <!-- Cart Button -->
                     <a href="cart.php" class="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                         <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,6 +475,9 @@ try {
                             </a>
                             <a href="orders.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-shopping-bag mr-2"></i> My Orders
+                            </a>
+                            <a href="wishlist.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-heart mr-2"></i> Wishlist
                             </a>
                             <div class="border-t border-gray-200 my-1"></div>
                             <a href="../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
@@ -522,10 +575,10 @@ try {
                         <div>
                             <h3 class="font-medium text-gray-700 mb-3">Category</h3>
                             <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
-                                <option value="">All Categories</option>
+                                <option value="0">All Categories</option>
                                 <?php foreach ($categories as $cat): ?>
-                                    <option value="<?php echo htmlspecialchars($cat['category'] ?? $cat->category); ?>" <?php echo ($category == ($cat['category'] ?? $cat->category)) ? 'selected' : ''; ?>>
-                                        <?php echo htmlspecialchars($cat['category'] ?? $cat->category); ?>
+                                    <option value="<?php echo (int)$cat['id']; ?>" <?php echo ($category === (int)$cat['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($cat['name']); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -565,10 +618,10 @@ try {
                                     </span>
                                 <?php endif; ?>
                                 
-                                <?php if ($category): ?>
+                                <?php if ($category > 0): ?>
                                     <span class="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full flex items-center">
-                                        Category: <?php echo htmlspecialchars($category); ?>
-                                        <a href="?<?php echo http_build_query(array_merge($_GET, ['category' => ''])); ?>" class="ml-2 text-green-600 hover:text-green-800">
+                                        Category: <?php echo htmlspecialchars($selected_category_name ?: ('#' . $category)); ?>
+                                        <a href="?<?php echo http_build_query(array_merge($_GET, ['category' => 0])); ?>" class="ml-2 text-green-600 hover:text-green-800">
                                             ×
                                         </a>
                                     </span>
@@ -612,6 +665,10 @@ try {
                             <span class="text-gray-600">Items in Cart</span>
                             <span class="font-bold text-[#10854d]"><?php echo $cart_count; ?></span>
                         </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-600">Wishlist Crops</span>
+                            <span class="font-bold text-[#10854d]"><?php echo $wishlist_count; ?></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -632,6 +689,20 @@ try {
                             </p>
                         </div>
                     </div>
+                    <?php if (!empty($categories)): ?>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a href="?<?php echo http_build_query(array_merge($_GET, ['category' => 0, 'page' => 1])); ?>"
+                               class="px-3 py-1.5 rounded-full text-sm font-medium <?php echo $category === 0 ? 'bg-[#10854d] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                                All Crops
+                            </a>
+                            <?php foreach ($categories as $cat): ?>
+                                <a href="?<?php echo http_build_query(array_merge($_GET, ['category' => (int)$cat['id'], 'page' => 1])); ?>"
+                                   class="px-3 py-1.5 rounded-full text-sm font-medium <?php echo $category === (int)$cat['id'] ? 'bg-[#10854d] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                                    <?php echo htmlspecialchars($cat['name']); ?>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Products Grid -->
@@ -693,9 +764,9 @@ try {
                                         ₱<?php echo number_format($product['price'] ?? 0, 2); ?>
                                     </span>
                                     
-                                    <?php if (!empty($product['category'])): ?>
+                                    <?php if (!empty($product['category_name'])): ?>
                                         <span class="absolute bottom-3 right-3 px-3 py-1 bg-white/90 text-gray-700 text-xs font-medium rounded-full">
-                                            <?php echo htmlspecialchars($product['category']); ?>
+                                            <?php echo htmlspecialchars($product['category_name']); ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
@@ -731,10 +802,13 @@ try {
                                                 <?php echo $product['stock_quantity'] ?? 0; ?> available
                                             </span>
                                         </div>
-                                        
+                                    </div>
+
+                                    <div class="mt-3 flex items-center gap-2">
                                         <!-- Add to Cart Form -->
-                                        <form method="POST" action="" class="flex items-center space-x-2">
+                                        <form method="POST" action="cart.php" class="flex items-center space-x-2 flex-1">
                                             <input type="hidden" name="product_id" value="<?php echo $product['id'] ?? 0; ?>">
+                                            <input type="hidden" name="add_to_cart" value="1">
                                             <div class="relative">
                                                 <input type="number" 
                                                        name="quantity" 
@@ -744,12 +818,21 @@ try {
                                                        class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm">
                                             </div>
                                             <button type="submit" 
-                                                    name="add_to_cart" 
                                                     class="px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-colors flex items-center">
                                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                                                 </svg>
                                                 Add
+                                            </button>
+                                        </form>
+
+                                        <!-- Add to Wishlist -->
+                                        <form method="POST" action="" class="shrink-0">
+                                            <input type="hidden" name="product_id" value="<?php echo (int)($product['id'] ?? 0); ?>">
+                                            <button type="submit"
+                                                    name="add_to_wishlist"
+                                                    class="px-3 py-2 rounded-lg border text-sm font-medium transition-colors <?php echo in_array((int)($product['id'] ?? 0), $wishlist_product_ids, true) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'; ?>">
+                                                <i class="fas fa-heart"></i>
                                             </button>
                                         </form>
                                     </div>
@@ -760,10 +843,10 @@ try {
                                                 class="text-sm text-[#10854d] hover:underline">
                                             View Details
                                         </button>
-                                        <?php if (!empty($product['category'])): ?>
-                                            <a href="?category=<?php echo urlencode($product['category']); ?>" 
+                                        <?php if (!empty($product['category_id']) && !empty($product['category_name'])): ?>
+                                            <a href="?category=<?php echo (int)$product['category_id']; ?>" 
                                                class="text-sm text-gray-600 hover:text-[#10854d]">
-                                                More <?php echo htmlspecialchars($product['category']); ?>
+                                                More <?php echo htmlspecialchars($product['category_name']); ?>
                                             </a>
                                         <?php endif; ?>
                                     </div>
@@ -923,9 +1006,9 @@ try {
         });
         
         // Add to cart with animation
-        document.querySelectorAll('form[action=""]').forEach(form => {
+        document.querySelectorAll('form[action="cart.php"]').forEach(form => {
             form.addEventListener('submit', function(e) {
-                const button = this.querySelector('button[name="add_to_cart"]');
+                const button = this.querySelector('button[type="submit"]');
                 if (button) {
                     const originalText = button.innerHTML;
                     button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Adding...';
@@ -942,3 +1025,5 @@ try {
     </script>
 </body>
 </html>
+
+
