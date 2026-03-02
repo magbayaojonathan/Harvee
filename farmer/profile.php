@@ -337,6 +337,12 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                 </svg>
                                 <span class="text-gray-700">View Orders</span>
                             </a>
+                            <a href="reviews.php" class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                <svg class="w-5 h-5 text-[#10854d] mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.093 3.362a1 1 0 00.95.69h3.534c.969 0 1.371 1.24.588 1.81l-2.86 2.078a1 1 0 00-.364 1.118l1.093 3.362c.3.921-.755 1.688-1.538 1.118l-2.86-2.078a1 1 0 00-1.176 0l-2.86 2.078c-.783.57-1.838-.197-1.539-1.118l1.093-3.362a1 1 0 00-.364-1.118L2.88 8.79c-.783-.57-.38-1.81.588-1.81h3.534a1 1 0 00.95-.69l1.093-3.362z"/>
+                                </svg>
+                                <span class="text-gray-700">Customer Reviews</span>
+                            </a>
                             <a href="../auth/logout.php" class="flex items-center p-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
                                 <svg class="w-5 h-5 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>

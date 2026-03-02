@@ -177,6 +177,10 @@ try {
                             <a href="farmer/dashboard.php" class="hidden md:inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
                                 <i class="fas fa-tachometer-alt mr-2"></i> Farmer Dashboard
                             </a>
+                        <?php elseif($_SESSION['role'] === 'driver'): ?>
+                            <a href="driver/dashboard.php" class="hidden md:inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                                <i class="fas fa-truck mr-2"></i> Driver Dashboard
+                            </a>
                         <?php endif; ?>
                         <a href="auth/logout.php" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
                             Logout
@@ -214,6 +218,9 @@ try {
                             </a>
                             <a href="auth/register.php?role=farmer" class="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-semibold hover:bg-white hover:text-[#10854d] transition-all text-center">
                                 <i class="fas fa-tractor mr-2"></i>Sell as Farmer
+                            </a>
+                            <a href="auth/register.php?role=driver" class="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-semibold hover:bg-white hover:text-[#10854d] transition-all text-center">
+                                <i class="fas fa-truck mr-2"></i>Drive for Harvee
                             </a>
                         <?php endif; ?>
                     </div>
@@ -527,15 +534,28 @@ try {
             
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
                 <?php if(isset($_SESSION['user_id'])): ?>
-                    <a href="customer/dashboard.php" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all">
-                        <i class="fas fa-tachometer-alt mr-2"></i> Go to Dashboard
-                    </a>
+                    <?php if($_SESSION['role'] === 'farmer'): ?>
+                        <a href="farmer/dashboard.php" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all">
+                            <i class="fas fa-tachometer-alt mr-2"></i> Go to Dashboard
+                        </a>
+                    <?php elseif($_SESSION['role'] === 'driver'): ?>
+                        <a href="driver/dashboard.php" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all">
+                            <i class="fas fa-tachometer-alt mr-2"></i> Go to Dashboard
+                        </a>
+                    <?php else: ?>
+                        <a href="customer/dashboard.php" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all">
+                            <i class="fas fa-tachometer-alt mr-2"></i> Go to Dashboard
+                        </a>
+                    <?php endif; ?>
                 <?php else: ?>
                     <a href="auth/register.php?role=customer" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all">
                         <i class="fas fa-user-plus mr-2"></i> Sign Up as Customer
                     </a>
                     <a href="auth/register.php?role=farmer" class="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-semibold hover:bg-white hover:text-[#10854d] transition-all">
                         <i class="fas fa-tractor mr-2"></i> Become a Farmer
+                    </a>
+                    <a href="auth/register.php?role=driver" class="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-semibold hover:bg-white hover:text-[#10854d] transition-all">
+                        <i class="fas fa-truck mr-2"></i> Join as Driver
                     </a>
                 <?php endif; ?>
             </div>

@@ -17,6 +17,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $role = $_POST['role'] ?? 'customer';
     $remember = isset($_POST['remember']);
+
+    if (!in_array($role, ['customer', 'farmer', 'driver'], true)) {
+        $errors[] = "Invalid role selected";
+    }
     
     // Validation
     if (empty($email)) {
@@ -65,7 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = true;
                     
                     // Determine dashboard based on role
-                    $dashboard = ($user['role'] === 'farmer') ? '../farmer/dashboard.php' : '../customer/dashboard.php';
+                    if ($user['role'] === 'farmer') {
+                        $dashboard = '../farmer/dashboard.php';
+                    } elseif ($user['role'] === 'driver') {
+                        $dashboard = '../driver/dashboard.php';
+                    } else {
+                        $dashboard = '../customer/dashboard.php';
+                    }
                     
                     // Redirect after 2 seconds
                     header("refresh:2;url=$dashboard");
@@ -278,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <select name="role" id="roleSelect" class="hidden">
         <option value="customer" <?php echo (($_POST['role'] ?? 'customer') === 'customer') ? 'selected' : ''; ?>>Customer</option>
         <option value="farmer" <?php echo (($_POST['role'] ?? 'customer') === 'farmer') ? 'selected' : ''; ?>>Farmer</option>
+        <option value="driver" <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? 'selected' : ''; ?>>Driver</option>
     </select>
     
    <!-- Custom dropdown button - FIXED ALIGNMENT -->
@@ -324,6 +335,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="text-xs text-gray-500">Sell your farm products</div>
             </div>
             <i data-lucide="check" class="w-5 h-5 text-[#10854d] <?php echo (($_POST['role'] ?? 'customer') === 'farmer') ? '' : 'hidden'; ?> check-icon"></i>
+        </button>
+
+        <div class="border-t border-gray-100"></div>
+
+        <button type="button"
+                class="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors duration-150 role-option <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? 'bg-green-50' : ''; ?>"
+                data-value="driver">
+            <div class="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center">
+                <i data-lucide="truck" class="w-4 h-4 text-sky-600"></i>
+            </div>
+            <div class="flex-1 text-left">
+                <div class="font-medium text-gray-800">Driver</div>
+                <div class="text-xs text-gray-500">Deliver and confirm drop-offs</div>
+            </div>
+            <i data-lucide="check" class="w-5 h-5 text-[#10854d] <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? '' : 'hidden'; ?> check-icon"></i>
         </button>
     </div>
 </div>
@@ -413,7 +439,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         roleOptions.forEach(option => {
             option.addEventListener('click', function() {
                 const value = this.dataset.value;
-                const text = value === 'customer' ? 'Customer' : 'Farmer';
+                let text = 'Customer';
+                if (value === 'farmer') {
+                    text = 'Farmer';
+                } else if (value === 'driver') {
+                    text = 'Driver';
+                }
                 
                 // Update hidden select
                 roleSelect.value = value;

@@ -13,9 +13,11 @@ $order_id = $_GET['id'] ?? 0;
 
 // Get order details
 $stmt = $pdo->prepare("
-    SELECT o.*, u.name as customer_name, u.email, u.phone, u.address
+    SELECT o.*, u.name as customer_name, u.email, u.phone, u.address,
+           d.name as driver_name, d.phone as driver_phone
     FROM orders o
     JOIN users u ON o.customer_id = u.id
+    LEFT JOIN users d ON o.delivery_driver_id = d.id
     WHERE o.id = ? AND o.customer_id = ?
 ");
 $stmt->execute([$order_id, $user_id]);
@@ -166,6 +168,26 @@ $total = $subtotal + $shipping + $service_fee;
                                 </div>
                             </div>
 
+                            <?php if (!empty($order['driver_name']) || !empty($order['delivered_proof_image'])): ?>
+                            <div class="border-t border-gray-200 pt-4 mt-4">
+                                <h3 class="font-semibold text-gray-800 mb-3">Delivery Verification</h3>
+                                <div class="space-y-2 text-sm">
+                                    <?php if (!empty($order['driver_name'])): ?>
+                                        <p><span class="text-gray-500">Driver:</span> <?php echo htmlspecialchars($order['driver_name']); ?></p>
+                                        <p><span class="text-gray-500">Driver Phone:</span> <?php echo htmlspecialchars($order['driver_phone'] ?? 'Not provided'); ?></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($order['delivered_notes'])): ?>
+                                        <p><span class="text-gray-500">Driver Notes:</span> <?php echo htmlspecialchars($order['delivered_notes']); ?></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($order['delivered_proof_image'])): ?>
+                                        <a href="../<?php echo htmlspecialchars($order['delivered_proof_image']); ?>" target="_blank" class="inline-flex items-center text-[#10854d] hover:underline font-medium">
+                                            View delivery proof image
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
                             <!-- Action Buttons -->
                             <div class="mt-6 space-y-3">
                                 <?php if (($order['order_status'] ?? '') === 'pending'): ?>
@@ -176,6 +198,13 @@ $total = $subtotal + $shipping + $service_fee;
                                             Cancel Order
                                         </button>
                                     </form>
+                                <?php endif; ?>
+
+                                <?php if (($order['order_status'] ?? '') === 'delivered'): ?>
+                                    <a href="rate_order.php?id=<?php echo (int)$order['id']; ?>" 
+                                       class="block text-center w-full py-3 bg-yellow-100 text-yellow-700 font-medium rounded-lg hover:bg-yellow-200 transition-colors">
+                                        Rate Products
+                                    </a>
                                 <?php endif; ?>
                                 
                                 <button onclick="window.print()" 

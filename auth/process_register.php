@@ -72,7 +72,7 @@ if ($role === 'farmer' && empty($farmName)) {
     $errors[] = "Farm name is required for farmers";
 }
 
-if (!in_array($role, ['customer', 'farmer'])) {
+if (!in_array($role, ['customer', 'farmer', 'driver'])) {
     $errors[] = "Invalid role selected";
 }
 
@@ -194,6 +194,8 @@ try {
     // Redirect based on role
     if ($role === 'farmer') {
         header('Location: ../farmer/dashboard.php?welcome=1');
+    } elseif ($role === 'driver') {
+        header('Location: ../driver/dashboard.php?welcome=1');
     } else {
         header('Location: ../customer/dashboard.php?welcome=1');
     }

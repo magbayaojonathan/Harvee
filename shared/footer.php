@@ -35,6 +35,8 @@ if ($harvee_pos !== false) {
                 <li><a href="<?php echo $base; ?>customer/cart.php">Cart</a></li>
                 <li><a href="<?php echo $base; ?>customer/orders.php">My Orders</a></li>
                 <li><a href="<?php echo $base; ?>customer/profile.php">Profile</a></li>
+            <?php elseif($_SESSION['role'] === 'driver'): ?>
+                <li><a href="<?php echo $base; ?>driver/dashboard.php">Driver Dashboard</a></li>
             <?php endif; ?>
             
             <li><a href="<?php echo $base; ?>auth/logout.php">Logout</a></li>

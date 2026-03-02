@@ -164,7 +164,7 @@ try {
         <!-- Add to Cart Form -->
         <?php if (!$is_out_of_stock): ?>
             <div class="border-t pt-6">
-                <form method="POST" action="customer/cart.php" class="flex items-end gap-4">
+                <form method="POST" action="/HARVEE/customer/cart.php" class="flex items-end gap-4">
                     <div class="flex-1">
                         <label class="block text-gray-700 font-medium mb-2">Quantity</label>
                         <input type="number" 

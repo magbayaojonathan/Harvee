@@ -16,33 +16,48 @@ $message = '';
 $message_type = '';
 
 $valid_statuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+$farmer_updatable_status = 'confirmed';
 
 // Update order status
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $order_id = (int)($_POST['order_id'] ?? 0);
     $new_status = trim($_POST['new_status'] ?? '');
 
-    if ($order_id <= 0 || !in_array($new_status, $valid_statuses, true)) {
+    if ($order_id <= 0 || $new_status !== $farmer_updatable_status) {
         $message = 'Invalid request.';
         $message_type = 'error';
     } else {
         try {
             // Ensure the farmer owns at least one item in this order
             $check_stmt = $pdo->prepare("
-                SELECT COUNT(*) AS item_count
-                FROM order_items
-                WHERE order_id = ? AND farmer_id = ?
+                SELECT o.order_status, COUNT(*) AS item_count
+                FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE oi.order_id = ? AND oi.farmer_id = ?
+                GROUP BY o.order_status
             ");
             $check_stmt->execute([$order_id, $user_id]);
-            $owned_items = (int)$check_stmt->fetchColumn();
+            $owned_order = $check_stmt->fetch(PDO::FETCH_ASSOC);
+            $owned_items = (int)($owned_order['item_count'] ?? 0);
 
             if ($owned_items === 0) {
                 $message = 'You do not have permission to update this order.';
                 $message_type = 'error';
+            } elseif (($owned_order['order_status'] ?? '') !== 'pending') {
+                $message = 'Only pending orders can be confirmed by farmers.';
+                $message_type = 'error';
             } else {
-                $update_stmt = $pdo->prepare("UPDATE orders SET order_status = ? WHERE id = ?");
-                $update_stmt->execute([$new_status, $order_id]);
-                $message = 'Order status updated successfully.';
+                $update_stmt = $pdo->prepare("UPDATE orders SET order_status = 'confirmed' WHERE id = ? AND order_status = 'pending'");
+                $update_stmt->execute([$order_id]);
+
+                if ($update_stmt->rowCount() > 0) {
+                    $track_stmt = $pdo->prepare("INSERT INTO order_tracking (order_id, status, description, updated_by) VALUES (?, 'confirmed', ?, ?)");
+                    $track_stmt->execute([$order_id, 'Order confirmed by farmer and ready for driver assignment.', $user_id]);
+                }
+
+                $message = $update_stmt->rowCount() > 0
+                    ? 'Order confirmed successfully. Drivers can now claim this delivery.'
+                    : 'Order was already updated.';
                 $message_type = 'success';
             }
         } catch (PDOException $e) {
@@ -199,6 +214,7 @@ try {
                     <a href="dashboard.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-home mr-1"></i> Dashboard</a>
                     <a href="products/products.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-box mr-1"></i> Products</a>
                     <a href="orders.php" class="nav-link active text-gray-700 font-medium"><i class="fas fa-shopping-bag mr-1"></i> Orders</a>
+                    <a href="reviews.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-star mr-1"></i> Reviews</a>
                     <a href="profile.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-user mr-1"></i> Profile</a>
                 </div>
 
@@ -217,7 +233,7 @@ try {
     <main class="container mx-auto px-4 py-8">
         <div class="hero rounded-2xl p-8 mb-8 text-white">
             <h1 class="text-3xl md:text-4xl font-bold mb-2">Orders Management</h1>
-            <p class="text-white/90 text-lg">Track and update your customer orders, <?php echo htmlspecialchars($first_name); ?>.</p>
+            <p class="text-white/90 text-lg">Confirm new orders so drivers can claim and deliver them, <?php echo htmlspecialchars($first_name); ?>.</p>
         </div>
 
         <?php if ($message): ?>
@@ -289,19 +305,23 @@ try {
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <form method="POST" action="" class="flex items-center gap-2">
-                                            <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
-                                            <select name="new_status" class="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#10854d]/20">
-                                                <?php foreach ($valid_statuses as $s): ?>
-                                                    <option value="<?php echo $s; ?>" <?php echo (($order['order_status'] ?? '') === $s) ? 'selected' : ''; ?>>
-                                                        <?php echo ucfirst($s); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <button type="submit" name="update_status" class="px-3 py-1.5 bg-[#10854d] text-white text-xs font-medium rounded-lg hover:bg-[#0d6e40]">
-                                                Save
-                                            </button>
-                                        </form>
+                                        <?php if (($order['order_status'] ?? '') === 'pending'): ?>
+                                            <form method="POST" action="" class="flex items-center gap-2">
+                                                <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
+                                                <input type="hidden" name="new_status" value="confirmed">
+                                                <button type="submit" name="update_status" class="px-3 py-1.5 bg-[#10854d] text-white text-xs font-medium rounded-lg hover:bg-[#0d6e40]">
+                                                    Confirm Order
+                                                </button>
+                                            </form>
+                                        <?php elseif (($order['order_status'] ?? '') === 'confirmed'): ?>
+                                            <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+                                                Waiting for Driver
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600">
+                                                Managed by Driver
+                                            </span>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

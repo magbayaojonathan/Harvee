@@ -21,6 +21,11 @@ $formData = [
     'role' => 'customer'
 ];
 
+$requestedRole = strtolower(trim($_GET['role'] ?? ''));
+if (in_array($requestedRole, ['customer', 'farmer', 'driver'], true)) {
+    $formData['role'] = $requestedRole;
+}
+
 // Load saved form data from session
 if (isset($_SESSION['form_data'])) {
     $formData = array_merge($formData, $_SESSION['form_data']);
@@ -154,6 +159,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($formData['role'] === 'farmer' && empty($formData['farmName'])) {
                 $errors[] = "Farm name is required for farmers";
             }
+
+            if (!in_array($formData['role'], ['customer', 'farmer', 'driver'], true)) {
+                $errors[] = "Invalid role selected";
+            }
             
             if (empty($errors)) {
                 // Proceed to process_register.php
@@ -281,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 9999px;
             display: inline-flex;
             width: 100%;
-            max-width: 320px;
+            max-width: 460px;
         }
         
         .role-btn {
@@ -731,6 +740,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <button type="button" onclick="setRole('farmer')" 
                                                 class="role-btn <?php echo ($formData['role'] ?? 'customer') === 'farmer' ? 'active' : ''; ?>">
                                             FARMER
+                                        </button>
+                                        <button type="button" onclick="setRole('driver')" 
+                                                class="role-btn <?php echo ($formData['role'] ?? 'customer') === 'driver' ? 'active' : ''; ?>">
+                                            DRIVER
                                         </button>
                                     </div>
                                     <input type="hidden" name="role" id="roleInput" value="<?php echo $formData['role'] ?? 'customer'; ?>">

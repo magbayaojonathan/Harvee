@@ -224,6 +224,9 @@ try {
                     <a href="orders.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
                         <i class="fas fa-shopping-bag mr-1"></i> Orders
                     </a>
+                    <a href="reviews.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
+                        <i class="fas fa-star mr-1"></i> Reviews
+                    </a>
                     <a href="customers.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
                         <i class="fas fa-users mr-1"></i> Customers
                     </a>
@@ -523,6 +526,10 @@ try {
                             <?php if ($stats['pending_orders'] > 0): ?>
                                 <span class="text-xs text-yellow-600 font-semibold"><?php echo $stats['pending_orders']; ?> orders</span>
                             <?php endif; ?>
+                        </a>
+                        <a href="reviews.php" class="p-4 bg-amber-50 rounded-lg text-center hover:bg-amber-100 transition-all group">
+                            <i class="fas fa-star text-2xl text-amber-600 mb-2 group-hover:scale-110 transition-transform"></i>
+                            <span class="block text-sm font-medium text-gray-700">Reviews</span>
                         </a>
                         
                         <a href="earnings.php" class="p-4 bg-purple-50 rounded-lg text-center hover:bg-purple-100 transition-all group">

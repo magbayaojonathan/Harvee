@@ -46,6 +46,8 @@ $base = str_repeat('../', max(0, $depth));
                         </ul>
                     </li>
                     <li><a href="<?php echo $base; ?>dashboard.php"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                <?php elseif($_SESSION['role'] === 'driver'): ?>
+                    <li><a href="<?php echo $base; ?>dashboard.php"><i class="fas fa-truck"></i> Driver Dashboard</a></li>
                 <?php endif; ?>
                 
                 <li class="user-info">
