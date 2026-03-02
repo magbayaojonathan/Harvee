@@ -194,7 +194,7 @@ try {
     $available_stmt->execute($available_params);
     $available_orders = $available_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $active_sql = "\n        SELECT o.id, o.order_number, o.order_status, o.created_at, o.shipping_name, o.shipping_phone, o.shipping_address,\n               u.first_name, u.last_name\n        FROM orders o\n        JOIN users u ON o.customer_id = u.id\n        WHERE o.delivery_driver_id = ?\n          AND o.order_status IN ('processing', 'shipped', 'confirmed')\n    ";
+    $active_sql = "\n        SELECT o.id, o.order_number, o.order_status, o.created_at, o.shipping_name, o.shipping_phone, o.shipping_address,\n               u.first_name, u.last_name,\n               u.latitude AS customer_latitude, u.longitude AS customer_longitude, u.address AS customer_profile_address,\n               fu.id AS farmer_id, fu.first_name AS farmer_first_name, fu.last_name AS farmer_last_name,\n               fu.latitude AS farmer_latitude, fu.longitude AS farmer_longitude,\n               COALESCE(fp.business_address, fu.address) AS farmer_address\n        FROM orders o\n        JOIN users u ON o.customer_id = u.id\n        LEFT JOIN (\n            SELECT oi.order_id, MIN(oi.farmer_id) AS farmer_id\n            FROM order_items oi\n            GROUP BY oi.order_id\n        ) ofm ON ofm.order_id = o.id\n        LEFT JOIN users fu ON fu.id = ofm.farmer_id\n        LEFT JOIN farmer_profiles fp ON fp.user_id = fu.id\n        WHERE o.delivery_driver_id = ?\n          AND o.order_status IN ('processing', 'shipped', 'confirmed')\n    ";
     $active_params = [$driver_id];
     if ($search !== '') {
         $active_sql .= " AND (o.order_number LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR o.shipping_name LIKE ? OR o.shipping_address LIKE ?)";
@@ -223,6 +223,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Driver Dashboard - Harvee</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -232,9 +233,20 @@ try {
         .hero { background: linear-gradient(120deg, #0f8b50 0%, #0d6e40 45%, #10a164 100%); }
         .nav-pill { border: 1px solid rgba(16, 133, 77, 0.2); }
         .nav-pill:hover { background: #ecfdf3; color: #0f8b50; border-color: rgba(16, 133, 77, 0.35); }
+        .route-map {
+            height: 220px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #f3f4f6;
+        }
+        .route-meta {
+            font-size: 0.75rem;
+            color: #4b5563;
+        }
     </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen flex flex-col">
     <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-40 border-b border-green-100">
         <div class="container mx-auto px-4">
             <div class="h-16 flex items-center justify-between gap-4">
@@ -261,7 +273,7 @@ try {
         </div>
     </nav>
 
-    <main class="container mx-auto px-4 py-8">
+    <main class="container mx-auto px-4 py-8 flex-1">
         <div class="hero rounded-2xl p-8 text-white mb-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
@@ -344,7 +356,12 @@ try {
                         <p class="text-gray-500 text-sm">You have no active deliveries.</p>
                     <?php else: ?>
                         <?php foreach ($my_active_orders as $order): ?>
-                            <?php $customer_name = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? '')); ?>
+                            <?php
+                                $customer_name = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? ''));
+                                $farmer_name = trim(($order['farmer_first_name'] ?? '') . ' ' . ($order['farmer_last_name'] ?? ''));
+                                $pickup_address = trim((string)($order['farmer_address'] ?? ''));
+                                $dropoff_address = trim((string)($order['shipping_address'] ?? ''));
+                            ?>
                             <div class="border border-gray-200 rounded-lg p-4">
                                 <div class="flex justify-between gap-3 mb-2">
                                     <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($order['order_number'] ?: ('ORD-' . str_pad((string)$order['id'], 6, '0', STR_PAD_LEFT))); ?></p>
@@ -353,6 +370,27 @@ try {
                                 <p class="text-sm text-gray-600">Customer: <?php echo htmlspecialchars($customer_name ?: ($order['shipping_name'] ?? 'N/A')); ?></p>
                                 <p class="text-sm text-gray-600">Phone: <?php echo htmlspecialchars($order['shipping_phone'] ?? 'N/A'); ?></p>
                                 <p class="text-sm text-gray-600">Address: <?php echo htmlspecialchars($order['shipping_address'] ?? 'N/A'); ?></p>
+
+                                <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">Live Route</p>
+                                    <p class="text-xs text-gray-600"><span class="font-semibold text-indigo-600">Pickup:</span> <?php echo htmlspecialchars(($farmer_name !== '' ? $farmer_name . ' - ' : '') . ($pickup_address !== '' ? $pickup_address : 'Farmer address unavailable')); ?></p>
+                                    <p class="text-xs text-gray-600 mt-1"><span class="font-semibold text-green-600">Dropoff:</span> <?php echo htmlspecialchars($dropoff_address !== '' ? $dropoff_address : 'Customer address unavailable'); ?></p>
+                                    <button type="button"
+                                            class="mt-2 px-3 py-1.5 bg-white border border-gray-300 text-xs rounded-lg hover:bg-gray-100"
+                                            onclick="loadOrderRoute(this)"
+                                            data-map-id="route-map-<?php echo (int)$order['id']; ?>"
+                                            data-meta-id="route-meta-<?php echo (int)$order['id']; ?>"
+                                            data-pickup-lat="<?php echo htmlspecialchars((string)($order['farmer_latitude'] ?? '')); ?>"
+                                            data-pickup-lng="<?php echo htmlspecialchars((string)($order['farmer_longitude'] ?? '')); ?>"
+                                            data-dropoff-lat="<?php echo htmlspecialchars((string)($order['customer_latitude'] ?? '')); ?>"
+                                            data-dropoff-lng="<?php echo htmlspecialchars((string)($order['customer_longitude'] ?? '')); ?>"
+                                            data-pickup-address="<?php echo htmlspecialchars($pickup_address); ?>"
+                                            data-dropoff-address="<?php echo htmlspecialchars($dropoff_address); ?>">
+                                        Show Route Map
+                                    </button>
+                                    <div id="route-meta-<?php echo (int)$order['id']; ?>" class="route-meta mt-2"></div>
+                                    <div id="route-map-<?php echo (int)$order['id']; ?>" class="route-map mt-2 hidden"></div>
+                                </div>
 
                                 <div class="mt-4 flex flex-wrap gap-2">
                                     <form method="POST">
@@ -420,5 +458,165 @@ try {
             </div>
         </section>
     </main>
+    <footer class="bg-white/90 backdrop-blur-sm border-t border-green-100 mt-10">
+        <div class="container mx-auto px-4 py-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <div class="flex items-center space-x-2 mb-3">
+                        <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
+                            <span class="text-white font-bold">H</span>
+                        </div>
+                        <span class="text-lg font-bold text-[#10854d]">Harvee Driver</span>
+                    </div>
+                    <p class="text-sm text-gray-600">Reliable farm-to-home delivery operations with verified drop-off proof.</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-800 mb-3">Quick Links</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#available" class="text-gray-600 hover:text-[#10854d]">Available Deliveries</a></li>
+                        <li><a href="#active" class="text-gray-600 hover:text-[#10854d]">My Active Deliveries</a></li>
+                        <li><a href="#completed" class="text-gray-600 hover:text-[#10854d]">Completed Deliveries</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-800 mb-3">Driver Notes</h4>
+                    <ul class="space-y-2 text-sm text-gray-600">
+                        <li><i class="fas fa-check-circle text-[#10854d] mr-2"></i>Always upload clear proof photos</li>
+                        <li><i class="fas fa-check-circle text-[#10854d] mr-2"></i>Confirm recipient details before handoff</li>
+                        <li><i class="fas fa-check-circle text-[#10854d] mr-2"></i>Update route status on time</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-200 mt-6 pt-5 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <p class="text-xs text-gray-500">&copy; <?php echo date('Y'); ?> Harvee Driver. All rights reserved.</p>
+                <p class="text-xs text-gray-500">Delivery flow: Farmer confirms -> Driver picks up -> Driver delivers with proof.</p>
+            </div>
+        </div>
+    </footer>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        const orderRouteMaps = {};
+
+        function parseCoord(value) {
+            const n = parseFloat(value);
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function formatDistance(meters) {
+            if (!Number.isFinite(meters)) return 'N/A';
+            if (meters < 1000) return `${Math.round(meters)} m`;
+            return `${(meters / 1000).toFixed(1)} km`;
+        }
+
+        function formatDuration(seconds) {
+            if (!Number.isFinite(seconds)) return 'N/A';
+            const mins = Math.round(seconds / 60);
+            if (mins < 60) return `${mins} min`;
+            const hours = Math.floor(mins / 60);
+            const remaining = mins % 60;
+            return `${hours}h ${remaining}m`;
+        }
+
+        async function geocodeAddress(address) {
+            if (!address || address.length < 4) return null;
+            const endpoint = `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ph&limit=1&q=${encodeURIComponent(address)}`;
+            const response = await fetch(endpoint);
+            if (!response.ok) return null;
+            const rows = await response.json();
+            if (!Array.isArray(rows) || rows.length === 0) return null;
+            return {
+                lat: parseFloat(rows[0].lat),
+                lng: parseFloat(rows[0].lon)
+            };
+        }
+
+        async function resolvePoint(lat, lng, address) {
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                return { lat, lng };
+            }
+            return await geocodeAddress(address);
+        }
+
+        async function getRoute(fromPoint, toPoint) {
+            const url = `https://router.project-osrm.org/route/v1/driving/${fromPoint.lng},${fromPoint.lat};${toPoint.lng},${toPoint.lat}?overview=full&geometries=geojson`;
+            const response = await fetch(url);
+            if (!response.ok) return null;
+            const payload = await response.json();
+            if (!payload || !Array.isArray(payload.routes) || payload.routes.length === 0) return null;
+            return payload.routes[0];
+        }
+
+        async function loadOrderRoute(buttonEl) {
+            if (!buttonEl || typeof L === 'undefined') return;
+
+            const mapId = buttonEl.dataset.mapId;
+            const metaId = buttonEl.dataset.metaId;
+            const mapEl = document.getElementById(mapId);
+            const metaEl = document.getElementById(metaId);
+            if (!mapEl || !metaEl) return;
+
+            if (orderRouteMaps[mapId]) {
+                mapEl.classList.toggle('hidden');
+                buttonEl.textContent = mapEl.classList.contains('hidden') ? 'Show Route Map' : 'Hide Route Map';
+                setTimeout(() => orderRouteMaps[mapId].invalidateSize(), 60);
+                return;
+            }
+
+            buttonEl.disabled = true;
+            buttonEl.textContent = 'Loading route...';
+            metaEl.textContent = 'Calculating best route...';
+            mapEl.classList.remove('hidden');
+
+            try {
+                const pickupLat = parseCoord(buttonEl.dataset.pickupLat);
+                const pickupLng = parseCoord(buttonEl.dataset.pickupLng);
+                const dropoffLat = parseCoord(buttonEl.dataset.dropoffLat);
+                const dropoffLng = parseCoord(buttonEl.dataset.dropoffLng);
+                const pickupAddress = (buttonEl.dataset.pickupAddress || '').trim();
+                const dropoffAddress = (buttonEl.dataset.dropoffAddress || '').trim();
+
+                const fromPoint = await resolvePoint(pickupLat, pickupLng, pickupAddress);
+                const toPoint = await resolvePoint(dropoffLat, dropoffLng, dropoffAddress);
+
+                if (!fromPoint || !toPoint || !Number.isFinite(fromPoint.lat) || !Number.isFinite(fromPoint.lng) || !Number.isFinite(toPoint.lat) || !Number.isFinite(toPoint.lng)) {
+                    metaEl.textContent = 'Unable to determine pickup/dropoff coordinates. Please ensure addresses are complete.';
+                    buttonEl.disabled = false;
+                    buttonEl.textContent = 'Show Route Map';
+                    return;
+                }
+
+                const map = L.map(mapId);
+                orderRouteMaps[mapId] = map;
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                const pickupMarker = L.marker([fromPoint.lat, fromPoint.lng]).addTo(map).bindPopup('Pickup (Farmer)');
+                const dropoffMarker = L.marker([toPoint.lat, toPoint.lng]).addTo(map).bindPopup('Dropoff (Customer)');
+
+                const route = await getRoute(fromPoint, toPoint);
+                if (route && route.geometry && Array.isArray(route.geometry.coordinates)) {
+                    const latLngs = route.geometry.coordinates.map(point => [point[1], point[0]]);
+                    const routeLine = L.polyline(latLngs, { color: '#10854d', weight: 5, opacity: 0.85 }).addTo(map);
+                    map.fitBounds(routeLine.getBounds(), { padding: [24, 24] });
+                    metaEl.textContent = `Distance: ${formatDistance(route.distance)} | ETA: ${formatDuration(route.duration)}`;
+                } else {
+                    const group = L.featureGroup([pickupMarker, dropoffMarker]);
+                    map.fitBounds(group.getBounds(), { padding: [24, 24] });
+                    metaEl.textContent = 'Map loaded. Route service unavailable right now.';
+                }
+
+                buttonEl.textContent = 'Hide Route Map';
+            } catch (error) {
+                metaEl.textContent = 'Failed to load route map. Try again.';
+                mapEl.classList.add('hidden');
+                buttonEl.textContent = 'Show Route Map';
+            } finally {
+                buttonEl.disabled = false;
+            }
+        }
+    </script>
 </body>
 </html>

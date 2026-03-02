@@ -16,6 +16,8 @@ $formData = [
     'confirmPassword' => '',
     'phone' => '',
     'address' => '',
+    'latitude' => '',
+    'longitude' => '',
     'farmName' => '',
     'terms' => false,
     'role' => 'customer'
@@ -73,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $emailCheckStmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
                 $emailCheckStmt->execute([$formData['email']]);
                 if ($emailCheckStmt->rowCount() > 0) {
-                    $errors[] = "Email already exists. Please use a different email.";
+                    $errors[] = "Account already exists for this email. Please log in and update your address in your profile settings.";
                 }
             } catch (PDOException $e) {
                 error_log("Email check error: " . $e->getMessage());
@@ -87,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $usernameCheckStmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
                 $usernameCheckStmt->execute([$formData['username']]);
                 if ($usernameCheckStmt->rowCount() > 0) {
-                    $errors[] = "Username already taken. Please choose a different username.";
+                    $errors[] = "Username already taken. If this is your account, log in and update your address in profile settings.";
                 }
             } catch (PDOException $e) {
                 error_log("Username check error: " . $e->getMessage());
@@ -184,6 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/font/lucide.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -394,6 +397,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .terms-label a:hover {
             text-decoration: underline;
+        }
+        .map-container {
+            border: 1px solid #E5E7EB;
+            border-radius: 16px;
+            overflow: hidden;
+            height: 260px;
+            background: #f3f4f6;
+        }
+        .map-help {
+            font-size: 0.8rem;
+            color: #4B5563;
+            margin: 8px 0 2px 4px;
+        }
+        .map-search-results {
+            margin-top: 6px;
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            background: #fff;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .map-search-item {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: #374151;
+            border: 0;
+            background: #fff;
+            cursor: pointer;
+        }
+        .map-search-item:hover {
+            background: #f3f4f6;
+        }
+        .map-search-bar {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .map-search-input {
+            flex: 1;
+            border: 1px solid #D1D5DB;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+        }
+        .map-search-input:focus {
+            border-color: #10854d;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(16, 133, 77, 0.1);
+        }
+        .map-search-btn {
+            border: 0;
+            border-radius: 10px;
+            background: #10854d;
+            color: #fff;
+            font-weight: 600;
+            padding: 10px 14px;
+            cursor: pointer;
+        }
+        .map-search-btn:hover {
+            background: #0d6e40;
         }
         
         /* Form container */
@@ -754,10 +819,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <span class="input-icon">
                                         <i data-lucide="map-pin" width="20" height="20"></i>
                                     </span>
-                                    <input type="text" name="address" placeholder="Complete Address" 
+                                    <input type="text" id="addressInput" name="address" placeholder="Complete Address" 
                                            value="<?php echo htmlspecialchars($formData['address']); ?>" 
                                            class="form-input" required>
                                 </div>
+                                <input type="hidden" id="latitudeInput" name="latitude" value="<?php echo htmlspecialchars($formData['latitude']); ?>">
+                                <input type="hidden" id="longitudeInput" name="longitude" value="<?php echo htmlspecialchars($formData['longitude']); ?>">
+                                <div class="map-help">Pin your exact delivery location using OpenStreetMap. You can click on map, drag marker, or search the address.</div>
+                                <div class="map-search-bar">
+                                    <input type="text" id="mapSearchInput" class="map-search-input" placeholder="Search location (barangay, street, city)">
+                                    <button type="button" id="mapSearchBtn" class="map-search-btn">Search</button>
+                                </div>
+                                <div id="mapSearchResults" class="map-search-results" style="display: none;"></div>
+                                <div class="map-container" id="registerMap"></div>
 
                                 <!-- Farmer Fields -->
                                 <div id="farmerFields" style="<?php echo ($formData['role'] ?? 'customer') === 'farmer' ? '' : 'display: none;'; ?>">
@@ -807,6 +881,146 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
+
+        let registerMap = null;
+        let registerMarker = null;
+        let searchDebounceTimer = null;
+
+        function updateLatLngInputs(lat, lng) {
+            const latInput = document.getElementById('latitudeInput');
+            const lngInput = document.getElementById('longitudeInput');
+            if (!latInput || !lngInput) return;
+            latInput.value = Number(lat).toFixed(8);
+            lngInput.value = Number(lng).toFixed(8);
+        }
+
+        function reverseGeocode(lat, lng) {
+            const addressInput = document.getElementById('addressInput');
+            if (!addressInput) return;
+
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.display_name && !addressInput.matches(':focus')) {
+                        addressInput.value = data.display_name;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function hideSearchResults() {
+            const box = document.getElementById('mapSearchResults');
+            if (!box) return;
+            box.style.display = 'none';
+            box.innerHTML = '';
+        }
+
+        function renderSearchResults(results) {
+            const box = document.getElementById('mapSearchResults');
+            if (!box) return;
+
+            if (!Array.isArray(results) || results.length === 0) {
+                hideSearchResults();
+                return;
+            }
+
+            box.innerHTML = '';
+            results.slice(0, 5).forEach(item => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'map-search-item';
+                btn.textContent = item.display_name || 'Unknown location';
+                btn.addEventListener('click', function() {
+                    const lat = parseFloat(item.lat);
+                    const lng = parseFloat(item.lon);
+                    if (isNaN(lat) || isNaN(lng) || !registerMap || !registerMarker) return;
+                    registerMap.setView([lat, lng], 16);
+                    registerMarker.setLatLng([lat, lng]);
+                    updateLatLngInputs(lat, lng);
+                    const addressInput = document.getElementById('addressInput');
+                    if (addressInput) {
+                        addressInput.value = item.display_name || addressInput.value;
+                    }
+                    hideSearchResults();
+                });
+                box.appendChild(btn);
+            });
+            box.style.display = 'block';
+        }
+
+        function searchAddress(address) {
+            if (!address || address.length < 4) {
+                hideSearchResults();
+                return;
+            }
+            fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ph&limit=5&q=${encodeURIComponent(address)}`)
+                .then(response => response.json())
+                .then(data => renderSearchResults(data))
+                .catch(() => hideSearchResults());
+        }
+
+        function initRegisterMap() {
+            const mapEl = document.getElementById('registerMap');
+            const addressInput = document.getElementById('addressInput');
+            const mapSearchInput = document.getElementById('mapSearchInput');
+            const mapSearchBtn = document.getElementById('mapSearchBtn');
+            const latInput = document.getElementById('latitudeInput');
+            const lngInput = document.getElementById('longitudeInput');
+            if (!mapEl || !addressInput || typeof L === 'undefined') return;
+
+            const defaultLat = 14.5995;
+            const defaultLng = 120.9842;
+            const savedLat = parseFloat(latInput?.value || '');
+            const savedLng = parseFloat(lngInput?.value || '');
+            const initialLat = (!isNaN(savedLat)) ? savedLat : defaultLat;
+            const initialLng = (!isNaN(savedLng)) ? savedLng : defaultLng;
+            const initialZoom = (!isNaN(savedLat) && !isNaN(savedLng)) ? 16 : 12;
+
+            registerMap = L.map('registerMap').setView([initialLat, initialLng], initialZoom);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(registerMap);
+
+            registerMarker = L.marker([initialLat, initialLng], { draggable: true }).addTo(registerMap);
+            updateLatLngInputs(initialLat, initialLng);
+
+            registerMarker.on('dragend', function(event) {
+                const pos = event.target.getLatLng();
+                updateLatLngInputs(pos.lat, pos.lng);
+                reverseGeocode(pos.lat, pos.lng);
+            });
+
+            registerMap.on('click', function(event) {
+                const lat = event.latlng.lat;
+                const lng = event.latlng.lng;
+                registerMarker.setLatLng([lat, lng]);
+                updateLatLngInputs(lat, lng);
+                reverseGeocode(lat, lng);
+            });
+
+            addressInput.addEventListener('input', function() {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(() => searchAddress(addressInput.value.trim()), 400);
+            });
+
+            addressInput.addEventListener('blur', function() {
+                setTimeout(() => hideSearchResults(), 150);
+            });
+
+            if (mapSearchBtn && mapSearchInput) {
+                mapSearchBtn.addEventListener('click', function() {
+                    searchAddress(mapSearchInput.value.trim());
+                });
+
+                mapSearchInput.addEventListener('keydown', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        searchAddress(mapSearchInput.value.trim());
+                    }
+                });
+            }
+        }
 
         // Role toggle functionality
         function setRole(role) {
@@ -872,6 +1086,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             });
         }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('registerMap') && typeof L !== 'undefined') {
+                initRegisterMap();
+            }
+        });
     </script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </body>
 </html>

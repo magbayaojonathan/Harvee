@@ -17,6 +17,8 @@ $email = trim($formData['email'] ?? '');
 $password = $formData['password'] ?? '';
 $phone = trim($formData['phone'] ?? '');
 $address = trim($formData['address'] ?? '');
+$latitude = trim((string)($formData['latitude'] ?? ''));
+$longitude = trim((string)($formData['longitude'] ?? ''));
 $farmName = trim($formData['farmName'] ?? '');
 $role = $formData['role'] ?? 'customer';
 
@@ -68,6 +70,14 @@ if (empty($address)) {
     $errors[] = "Address is required";
 }
 
+if ($latitude !== '' && (!is_numeric($latitude) || (float)$latitude < -90 || (float)$latitude > 90)) {
+    $errors[] = "Invalid latitude value";
+}
+
+if ($longitude !== '' && (!is_numeric($longitude) || (float)$longitude < -180 || (float)$longitude > 180)) {
+    $errors[] = "Invalid longitude value";
+}
+
 if ($role === 'farmer' && empty($farmName)) {
     $errors[] = "Farm name is required for farmers";
 }
@@ -93,7 +103,7 @@ try {
     $stmt->execute([$email]);
     if ($stmt->rowCount() > 0) {
         $pdo->rollBack();
-        $_SESSION['register_errors'] = ['Email already registered'];
+        $_SESSION['register_errors'] = ['Account already exists for this email. Please log in and update your address in profile settings.'];
         $_SESSION['form_data'] = $formData;
         header('Location: register.php?step=1');
         exit;
@@ -104,7 +114,7 @@ try {
     $stmt->execute([$username]);
     if ($stmt->rowCount() > 0) {
         $pdo->rollBack();
-        $_SESSION['register_errors'] = ['Username already taken'];
+        $_SESSION['register_errors'] = ['Username already taken. If this is your account, please log in and update your address in profile settings.'];
         $_SESSION['form_data'] = $formData;
         header('Location: register.php?step=1');
         exit;
@@ -116,39 +126,89 @@ try {
     // Generate verification token (optional)
     $verification_token = bin2hex(random_bytes(32));
     
-    // Insert user into database
-    $stmt = $pdo->prepare("
-        INSERT INTO users (
-            first_name, 
-            last_name, 
-            name, 
-            username, 
-            email, 
-            password, 
-            phone, 
-            address, 
-            role, 
-            email_verified,
-            verification_token,
-            is_active,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    ");
-    
-    $stmt->execute([
-        $firstName,
-        $lastName,
-        $fullName,
-        $username,
-        $email,
-        $hashed_password,
-        $phone,
-        $address,
-        $role,
-        1, // Auto-verify for now (change to 0 if email verification is required)
-        $verification_token,
-        1  // Active by default
-    ]);
+    $has_latitude = false;
+    $has_longitude = false;
+    try {
+        $col_stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'latitude'");
+        $has_latitude = (bool)$col_stmt->fetch();
+        $col_stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'longitude'");
+        $has_longitude = (bool)$col_stmt->fetch();
+    } catch (PDOException $e) {
+        $has_latitude = false;
+        $has_longitude = false;
+    }
+
+    if ($has_latitude && $has_longitude) {
+        $stmt = $pdo->prepare("
+            INSERT INTO users (
+                first_name, 
+                last_name, 
+                name, 
+                username, 
+                email, 
+                password, 
+                phone, 
+                address,
+                latitude,
+                longitude,
+                role, 
+                email_verified,
+                verification_token,
+                is_active,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+
+        $stmt->execute([
+            $firstName,
+            $lastName,
+            $fullName,
+            $username,
+            $email,
+            $hashed_password,
+            $phone,
+            $address,
+            $latitude !== '' ? (float)$latitude : null,
+            $longitude !== '' ? (float)$longitude : null,
+            $role,
+            1,
+            $verification_token,
+            1
+        ]);
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO users (
+                first_name, 
+                last_name, 
+                name, 
+                username, 
+                email, 
+                password, 
+                phone, 
+                address, 
+                role, 
+                email_verified,
+                verification_token,
+                is_active,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+
+        $stmt->execute([
+            $firstName,
+            $lastName,
+            $fullName,
+            $username,
+            $email,
+            $hashed_password,
+            $phone,
+            $address,
+            $role,
+            1,
+            $verification_token,
+            1
+        ]);
+    }
     
     $user_id = $pdo->lastInsertId();
     
