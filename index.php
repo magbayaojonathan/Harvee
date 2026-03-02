@@ -6,6 +6,7 @@ require_once 'config/database.php';
 $featured_products = [];
 $categories = [];
 $stats = [];
+$testimonials = [];
 
 try {
     // Get featured products
@@ -31,6 +32,22 @@ try {
     $stats['products'] = $pdo->query("SELECT COUNT(*) FROM products WHERE is_active = 1")->fetchColumn();
     $stats['farmers'] = $pdo->query("SELECT COUNT(DISTINCT farmer_id) FROM products WHERE is_active = 1")->fetchColumn();
     $stats['customers'] = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'customer'")->fetchColumn();
+
+    // Get real approved reviews for homepage testimonials
+    $testimonial_stmt = $pdo->prepare("
+        SELECT r.rating, r.title, r.comment, r.images, r.created_at,
+               u.first_name, u.last_name, u.role,
+               p.name AS product_name
+        FROM reviews r
+        JOIN users u ON r.user_id = u.id
+        LEFT JOIN products p ON r.product_id = p.id
+        WHERE r.is_approved = 1
+          AND (TRIM(COALESCE(r.comment, '')) <> '' OR TRIM(COALESCE(r.title, '')) <> '')
+        ORDER BY r.created_at DESC
+        LIMIT 3
+    ");
+    $testimonial_stmt->execute();
+    $testimonials = $testimonial_stmt->fetchAll();
     
 } catch (PDOException $e) {
     error_log("Homepage error: " . $e->getMessage());
@@ -463,65 +480,64 @@ try {
             </div>
             
             <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-gray-50 rounded-2xl p-8">
-                    <div class="flex items-center mb-4">
-                        <div class="w-12 h-12 bg-[#10854d] rounded-full flex items-center justify-center text-white font-bold text-xl">
-                            M
+                <?php if (!empty($testimonials)): ?>
+                    <?php foreach ($testimonials as $review): ?>
+                        <?php
+                            $full_name = trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''));
+                            $first_name = trim((string)($review['first_name'] ?? ''));
+                            $initial = $first_name !== '' ? strtoupper(substr($first_name, 0, 1)) : 'U';
+                            $role_label = ucfirst((string)($review['role'] ?? 'user'));
+                            $rating = max(1, min(5, (int)($review['rating'] ?? 5)));
+                            $raw_text = trim((string)($review['comment'] ?? ''));
+                            if ($raw_text === '') {
+                                $raw_text = trim((string)($review['title'] ?? ''));
+                            }
+                            $display_text = mb_strlen($raw_text) > 170 ? mb_substr($raw_text, 0, 167) . '...' : $raw_text;
+                            $product_name = trim((string)($review['product_name'] ?? ''));
+                            $images_json = $review['images'] ?? '';
+                            $review_images = [];
+                            if (is_string($images_json) && $images_json !== '') {
+                                $decoded_images = json_decode($images_json, true);
+                                if (is_array($decoded_images)) {
+                                    $review_images = $decoded_images;
+                                }
+                            }
+                            $first_review_image = '';
+                            if (!empty($review_images) && is_string($review_images[0])) {
+                                $first_review_image = trim($review_images[0]);
+                            }
+                        ?>
+                        <div class="bg-gray-50 rounded-2xl p-8">
+                            <div class="flex items-center mb-4">
+                                <div class="w-12 h-12 bg-[#10854d] rounded-full flex items-center justify-center text-white font-bold text-xl">
+                                    <?php echo htmlspecialchars($initial); ?>
+                                </div>
+                                <div class="ml-4">
+                                    <h4 class="font-bold text-gray-800"><?php echo htmlspecialchars($full_name !== '' ? $full_name : 'Anonymous User'); ?></h4>
+                                    <p class="text-sm text-gray-500"><?php echo htmlspecialchars($role_label); ?></p>
+                                </div>
+                            </div>
+                            <p class="text-gray-600 italic">"<?php echo htmlspecialchars($display_text !== '' ? $display_text : 'Great experience using Harvee.'); ?>"</p>
+                            <?php if ($product_name !== ''): ?>
+                                <p class="text-xs text-gray-500 mt-2">Reviewed product: <?php echo htmlspecialchars($product_name); ?></p>
+                            <?php endif; ?>
+                            <?php if ($first_review_image !== ''): ?>
+                                <div class="mt-3">
+                                    <img src="<?php echo htmlspecialchars($first_review_image); ?>" alt="Review photo" class="w-full h-28 object-cover rounded-lg border border-gray-200">
+                                </div>
+                            <?php endif; ?>
+                            <div class="flex mt-4 text-yellow-400">
+                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <i class="fas fa-star <?php echo $i <= $rating ? 'text-yellow-400' : 'text-gray-300'; ?>"></i>
+                                <?php endfor; ?>
+                            </div>
                         </div>
-                        <div class="ml-4">
-                            <h4 class="font-bold text-gray-800">Maria Santos</h4>
-                            <p class="text-sm text-gray-500">Customer</p>
-                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="md:col-span-3 bg-gray-50 rounded-2xl p-8 text-center">
+                        <p class="text-gray-600">No approved reviews yet. Customer feedback will appear here once reviews are submitted and approved.</p>
                     </div>
-                    <p class="text-gray-600 italic">"The freshest vegetables I've ever bought! So convenient to order directly from farmers."</p>
-                    <div class="flex mt-4 text-yellow-400">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-50 rounded-2xl p-8">
-                    <div class="flex items-center mb-4">
-                        <div class="w-12 h-12 bg-[#10854d] rounded-full flex items-center justify-center text-white font-bold text-xl">
-                            J
-                        </div>
-                        <div class="ml-4">
-                            <h4 class="font-bold text-gray-800">Juan Dela Cruz</h4>
-                            <p class="text-sm text-gray-500">Farmer</p>
-                        </div>
-                    </div>
-                    <p class="text-gray-600 italic">"Harvee helped me reach more customers and sell my products at better prices."</p>
-                    <div class="flex mt-4 text-yellow-400">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                    </div>
-                </div>
-                
-                <div class="bg-gray-50 rounded-2xl p-8">
-                    <div class="flex items-center mb-4">
-                        <div class="w-12 h-12 bg-[#10854d] rounded-full flex items-center justify-center text-white font-bold text-xl">
-                            A
-                        </div>
-                        <div class="ml-4">
-                            <h4 class="font-bold text-gray-800">Ana Reyes</h4>
-                            <p class="text-sm text-gray-500">Customer</p>
-                        </div>
-                    </div>
-                    <p class="text-gray-600 italic">"Love supporting local farmers! The delivery is always fast and the produce is amazing."</p>
-                    <div class="flex mt-4 text-yellow-400">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </section>
