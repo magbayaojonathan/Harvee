@@ -139,10 +139,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($cart_items_checkout as $item) {
                 $order_total += $item['quantity'] * $item['price'];
             }
+
+            // Generate a unique order number (trigger-free hosting compatible)
+            $order_number = null;
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                $candidate = 'HV' . date('YmdHis') . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+                $check = $pdo->prepare("SELECT id FROM orders WHERE order_number = ? LIMIT 1");
+                $check->execute([$candidate]);
+                if (!$check->fetch()) {
+                    $order_number = $candidate;
+                    break;
+                }
+            }
+            if ($order_number === null) {
+                throw new Exception("Unable to generate a unique order number. Please try again.");
+            }
             
             // Create order
-            $stmt = $pdo->prepare("INSERT INTO orders (customer_id, total, order_status) VALUES (?, ?, 'pending')");
-            $stmt->execute([$user_id, $order_total]);
+            $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, total, order_status) VALUES (?, ?, ?, 'pending')");
+            $stmt->execute([$order_number, $user_id, $order_total]);
             $order_id = $pdo->lastInsertId();
             
             // Create order items and update stock
@@ -473,7 +488,9 @@ foreach ($cart_items as $item) {
                                                                    value="<?php echo $item['quantity']; ?>" 
                                                                    min="1" 
                                                                    max="<?php echo $max_quantity; ?>"
+                                                                   data-unit-price="<?php echo htmlspecialchars((string)$item['unit_price']); ?>"
                                                                    class="quantity-input border-0 focus:ring-2 focus:ring-[#10854d]"
+                                                                   oninput="recalculateCartSummary()"
                                                                    onchange="validateQuantity(this, <?php echo $max_quantity; ?>)"
                                                                    data-cart-id="<?php echo $item['cart_id']; ?>">
                                                             <button type="button" 
@@ -666,28 +683,93 @@ foreach ($cart_items as $item) {
     </main>
 
     <script>
+        function formatPeso(value) {
+            return '\u20B1' + Number(value).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function recalculateCartSummary() {
+            const qtyInputs = document.querySelectorAll('input[name^="quantities["]');
+            let subtotal = 0;
+
+            qtyInputs.forEach((input, index) => {
+                const qty = Math.max(1, parseInt(input.value || '1', 10));
+                const unit = parseFloat(input.dataset.unitPrice || '0');
+                const lineTotal = qty * unit;
+                subtotal += lineTotal;
+
+                // Update line total beside quantity controls
+                const row = input.closest('.flex.items-center.justify-between.mt-4');
+                if (row) {
+                    const rightAmount = row.querySelector('.ml-4 .font-bold');
+                    if (rightAmount) {
+                        rightAmount.textContent = formatPeso(lineTotal);
+                    }
+                }
+
+                // Update right order summary item row by index
+                const summaryRows = document.querySelectorAll('.space-y-3.mb-6 > .flex.justify-between.items-center.text-sm');
+                if (summaryRows[index]) {
+                    const qtyEl = summaryRows[index].querySelector('.text-gray-500');
+                    const totalEl = summaryRows[index].querySelector('.font-medium');
+                    if (qtyEl) qtyEl.textContent = '\u00D7' + qty;
+                    if (totalEl) totalEl.textContent = formatPeso(lineTotal);
+                }
+            });
+
+            const shipping = subtotal >= 1000 ? 0 : 50;
+            const serviceFee = 10;
+            const grandTotal = subtotal + shipping + serviceFee;
+
+            // Update subtotal, shipping, and total values
+            const calcSection = document.querySelector('.space-y-3.border-t.border-gray-200.pt-4.mb-6');
+            if (calcSection) {
+                const rows = calcSection.querySelectorAll(':scope > .flex.justify-between');
+                if (rows[0] && rows[0].children[1]) rows[0].children[1].textContent = formatPeso(subtotal);
+                if (rows[1] && rows[1].children[1]) rows[1].children[1].textContent = shipping === 0 ? 'FREE' : formatPeso(shipping);
+            }
+
+            const totalEl = document.querySelector('.border-t.border-gray-200.pt-4.mb-6 .text-2xl');
+            if (totalEl) totalEl.textContent = formatPeso(grandTotal);
+
+            const shippingNotice = document.querySelector('.space-y-3.border-t.border-gray-200.pt-4.mb-6 > .text-sm');
+                if (shippingNotice) {
+                if (shipping === 0) {
+                    shippingNotice.className = 'text-sm text-green-600 bg-green-50 p-3 rounded-lg';
+                    shippingNotice.innerHTML = '<div class="flex items-center">You\'ve earned FREE shipping!</div>';
+                } else {
+                    shippingNotice.className = 'text-sm text-blue-600 bg-blue-50 p-3 rounded-lg';
+                    shippingNotice.innerHTML = '<div class="flex items-center">Spend ' + formatPeso(1000 - subtotal) + ' more for FREE shipping!</div>';
+                }
+            }
+        }
+
         // Update quantity with buttons
         function updateQuantity(cartId, change) {
             const input = document.querySelector(`input[name="quantities[${cartId}]"]`);
-            let newValue = parseInt(input.value) + change;
-            const max = parseInt(input.max);
-            const min = parseInt(input.min);
-            
+            let newValue = parseInt(input.value, 10) + change;
+            const max = parseInt(input.max, 10);
+            const min = parseInt(input.min, 10);
+
             if (newValue > max) newValue = max;
             if (newValue < min) newValue = min;
-            
+
             input.value = newValue;
+            recalculateCartSummary();
         }
-        
+
         // Validate quantity input
         function validateQuantity(input, max) {
-            let value = parseInt(input.value);
+            let value = parseInt(input.value, 10);
             if (isNaN(value) || value < 1) {
                 input.value = 1;
             } else if (value > max) {
                 input.value = max;
                 alert(`Maximum quantity is ${max} due to stock limits.`);
             }
+            recalculateCartSummary();
         }
         
         // Clear cart confirmation
@@ -712,6 +794,8 @@ foreach ($cart_items as $item) {
         function confirmCheckout() {
             return confirm('Proceed to checkout?\n\nYou will be redirected to complete your order.');
         }
+
+        document.addEventListener('DOMContentLoaded', recalculateCartSummary);
     </script>
 </body>
 </html>

@@ -1,0 +1,77 @@
+[debug] [2026-03-03T12:23:27.629Z] ----------------------------------------------------------------------
+[debug] [2026-03-03T12:23:27.631Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js login
+[debug] [2026-03-03T12:23:27.631Z] CLI Version:   15.8.0
+[debug] [2026-03-03T12:23:27.631Z] Platform:      win32
+[debug] [2026-03-03T12:23:27.631Z] Node Version:  v24.13.1
+[debug] [2026-03-03T12:23:27.631Z] Time:          Tue Mar 03 2026 20:23:27 GMT+0800 (Philippine Standard Time)
+[debug] [2026-03-03T12:23:27.631Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-03T12:23:27.633Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] i  The Firebase CLI’s MCP server feature can optionally make use of Gemini in Firebase. Learn more about Gemini in Firebase and how it uses your data: https://firebase.google.com/docs/gemini-in-firebase#how-gemini-in-firebase-uses-your-data 
+[info] 
+[info] i  Firebase optionally collects CLI and Emulator Suite usage and error reporting information to help improve our products. Data is collected in accordance with Google's privacy policy (https://policies.google.com/privacy) and is not used to identify you. 
+[info] 
+[info] i  To change your preferences at any time, run `firebase logout` and `firebase login` again. 
+[info] 
+[info] Visit this URL on this device to log in:
+[info] https://accounts.google.com/o/oauth2/auth?client_id=563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com&scope=email%20openid%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloudplatformprojects.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Ffirebase%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&response_type=code&state=305187936&redirect_uri=http%3A%2F%2Flocalhost%3A9005
+[info] 
+[info] Waiting for authentication...
+[debug] [2026-03-03T12:23:56.208Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-03T12:23:56.208Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-03T12:24:28.920Z] >>> [apiv2][query] POST https://accounts.google.com/o/oauth2/token [none]
+[debug] [2026-03-03T12:24:28.921Z] >>> [apiv2][body] POST https://accounts.google.com/o/oauth2/token [omitted]
+[debug] [2026-03-03T12:24:29.184Z] <<< [apiv2][status] POST https://accounts.google.com/o/oauth2/token 200
+[debug] [2026-03-03T12:24:29.184Z] <<< [apiv2][body] POST https://accounts.google.com/o/oauth2/token [omitted]
+[info] 
+[info] +  Success! Logged in as samsonmarco18@gmail.com 
+[debug] [2026-03-03T12:24:35.593Z] Error: Timed out.
+    at Timeout.<anonymous> (C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-03-03T12:24:53.215Z] ----------------------------------------------------------------------
+[debug] [2026-03-03T12:24:53.217Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js login
+[debug] [2026-03-03T12:24:53.217Z] CLI Version:   15.8.0
+[debug] [2026-03-03T12:24:53.217Z] Platform:      win32
+[debug] [2026-03-03T12:24:53.217Z] Node Version:  v24.13.1
+[debug] [2026-03-03T12:24:53.217Z] Time:          Tue Mar 03 2026 20:24:53 GMT+0800 (Philippine Standard Time)
+[debug] [2026-03-03T12:24:53.218Z] ----------------------------------------------------------------------
+[debug] 
+[info] Already logged in as samsonmarco18@gmail.com
+[debug] [2026-03-03T12:24:59.130Z] Error: Timed out.
+    at Timeout._onTimeout (C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-03-03T12:25:08.638Z] ----------------------------------------------------------------------
+[debug] [2026-03-03T12:25:08.640Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2026-03-03T12:25:08.641Z] CLI Version:   15.8.0
+[debug] [2026-03-03T12:25:08.641Z] Platform:      win32
+[debug] [2026-03-03T12:25:08.641Z] Node Version:  v24.13.1
+[debug] [2026-03-03T12:25:08.641Z] Time:          Tue Mar 03 2026 20:25:08 GMT+0800 (Philippine Standard Time)
+[debug] [2026-03-03T12:25:08.641Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\xampppp\htdocs\HARVEE
+
+Before we get started, keep in mind:
+
+  * You are currently outside your home directory
+
+[debug] [2026-03-03T12:36:55.967Z] Error: Timed out.
+    at Timeout._onTimeout (C:\Users\Owner\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:308:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
