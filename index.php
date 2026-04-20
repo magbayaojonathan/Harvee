@@ -654,5 +654,23 @@ try {
             <i class="fas fa-shopping-bag text-xl"></i>
         </a>
     </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2mvMziVuP3i6UKXgD2Z8ewKMK5MpBkPY",
+            authDomain: "harvee-1039e.firebaseapp.com",
+            projectId: "harvee-1039e",
+            storageBucket: "harvee-1039e.firebasestorage.app",
+            messagingSenderId: "146835506130",
+            appId: "1:146835506130:web:d974ad5209dac07db5be0b",
+            measurementId: "G-DNVWZZEREE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        getAnalytics(app);
+    </script>
 </body>
 </html>
