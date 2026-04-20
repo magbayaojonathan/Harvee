@@ -2,6 +2,9 @@
 session_start();
 require_once 'config/database.php';
 
+$isLoggedIn = isset($_SESSION['user_id']);
+$isCustomerLoggedIn = $isLoggedIn && (($_SESSION['role'] ?? '') === 'customer');
+
 // Fetch featured products
 $featured_products = [];
 $categories = [];
@@ -152,6 +155,24 @@ try {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px -5px rgba(16, 133, 77, 0.4);
         }
+        .language-pill {
+            transition: all 0.25s ease;
+        }
+        .language-pill.is-active {
+            background: #10854d;
+            color: #fff;
+            box-shadow: 0 12px 18px -12px rgba(16, 133, 77, 0.8);
+        }
+        .guest-cart-note {
+            background: linear-gradient(135deg, rgba(16, 133, 77, 0.08), rgba(5, 150, 105, 0.12));
+            border: 1px solid rgba(16, 133, 77, 0.12);
+        }
+        .hero-search-input {
+            box-shadow: 0 14px 35px -24px rgba(15, 23, 42, 0.55);
+        }
+        .hero-search-button {
+            box-shadow: 0 14px 30px -18px rgba(250, 204, 21, 0.75);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -181,8 +202,17 @@ try {
                 </div>
 
                 <!-- Auth Buttons -->
-                <div class="flex items-center space-x-4">
-                    <?php if(isset($_SESSION['user_id'])): ?>
+                <div class="flex items-center space-x-3">
+                    <label for="heroLanguageSelect" class="sr-only">Choose language</label>
+                    <div class="hidden lg:block relative w-36">
+                        <select id="heroLanguageSelect" class="w-full appearance-none rounded-full border border-gray-200 bg-gray-50 px-4 py-2.5 pr-10 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-4 focus:ring-green-100">
+                            <option value="English">English</option>
+                            <option value="Filipino">Filipino</option>
+                            <option value="Bisaya">Bisaya</option>
+                        </select>
+                        <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    </div>
+                    <?php if($isLoggedIn): ?>
                         <?php if($_SESSION['role'] === 'customer'): ?>
                             <a href="customer/cart.php" class="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                                 <i class="fas fa-shopping-cart text-gray-700 text-xl"></i>
@@ -224,8 +254,23 @@ try {
                     <p class="text-xl md:text-2xl mb-8 text-green-50 max-w-2xl mx-auto md:mx-0">
                         Connect directly with local farmers and get the freshest produce delivered to your doorstep.
                     </p>
+                    <form id="homepageSearchForm" class="flex flex-col sm:flex-row gap-3 justify-center md:justify-start mb-8 max-w-xl mx-auto md:mx-0">
+                        <label for="homepageSearchInput" class="sr-only">Search for crops</label>
+                        <div class="relative flex-1">
+                            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input
+                                type="search"
+                                id="homepageSearchInput"
+                                placeholder="Search crops"
+                                class="hero-search-input w-full rounded-full border border-white/25 bg-white/95 px-12 py-3.5 text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-green-200"
+                            >
+                        </div>
+                        <button type="submit" class="hero-search-button px-5 py-3.5 rounded-full bg-yellow-300 text-gray-900 font-bold hover:bg-yellow-200 transition-colors">
+                            Search
+                        </button>
+                    </form>
                     <div class="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                        <?php if(isset($_SESSION['user_id'])): ?>
+                        <?php if($isLoggedIn): ?>
                             <a href="customer/browse.php" class="px-8 py-4 bg-white text-[#10854d] rounded-xl font-semibold hover:shadow-xl transition-all text-center btn-primary">
                                 <i class="fas fa-store mr-2"></i>Browse Products
                             </a>
@@ -344,7 +389,7 @@ try {
 
     <!-- Featured Products -->
     <?php if(!empty($featured_products)): ?>
-    <section class="py-20 bg-white">
+    <section id="featured-products" class="py-20 bg-white">
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-end mb-12">
                 <div>
@@ -357,10 +402,23 @@ try {
                     View All Products <i class="fas fa-arrow-right ml-2"></i>
                 </a>
             </div>
+            <div class="guest-cart-note rounded-2xl p-4 md:p-5 mb-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Professional marketplace flow</h3>
+                    <p class="text-sm text-gray-600">Guests can explore crops first, then sign in or sign up when they are ready to add items to cart and check out.</p>
+                </div>
+                <p id="featuredSearchStatus" class="text-sm font-medium text-[#10854d]">Use the search bar above to narrow these featured crops instantly.</p>
+            </div>
             
             <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <?php foreach($featured_products as $product): ?>
-                <div class="product-card bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                <div
+                    class="product-card bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100"
+                    data-product-card
+                    data-product-name="<?php echo htmlspecialchars(strtolower($product['name'] ?? ''), ENT_QUOTES); ?>"
+                    data-product-category="<?php echo htmlspecialchars(strtolower($product['category_name'] ?? ''), ENT_QUOTES); ?>"
+                    data-product-farmer="<?php echo htmlspecialchars(strtolower($product['farmer_name'] ?? ''), ENT_QUOTES); ?>"
+                >
                     <div class="relative h-48 bg-gradient-to-br from-green-50 to-gray-100">
                         <?php if(!empty($product['image_url'])): ?>
                             <img src="<?php echo htmlspecialchars($product['image_url']); ?>" 
@@ -403,9 +461,35 @@ try {
                                 View Details
                             </a>
                         </div>
+                        <div class="mt-4 flex flex-col gap-2">
+                            <?php if($isCustomerLoggedIn): ?>
+                                <form method="POST" action="customer/browse.php">
+                                    <input type="hidden" name="product_id" value="<?php echo (int)$product['id']; ?>">
+                                    <input type="hidden" name="quantity" value="1">
+                                    <button type="submit" name="add_to_cart" class="w-full px-4 py-3 rounded-lg bg-[#10854d] text-white text-sm font-semibold hover:bg-[#0d6e40] transition-colors">
+                                        <i class="fas fa-cart-plus mr-2"></i>Add to Cart
+                                    </button>
+                                </form>
+                            <?php elseif($isLoggedIn): ?>
+                                <div class="w-full px-4 py-3 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold text-center">
+                                    <i class="fas fa-circle-info mr-2"></i>Cart is available for customer accounts
+                                </div>
+                            <?php else: ?>
+                                <a href="auth/login.php" class="w-full px-4 py-3 rounded-lg bg-[#10854d] text-white text-sm font-semibold text-center hover:bg-[#0d6e40] transition-colors">
+                                    <i class="fas fa-right-to-bracket mr-2"></i>Sign In to Add to Cart
+                                </a>
+                                <a href="auth/register.php?role=customer" class="w-full px-4 py-3 rounded-lg border border-[#10854d] text-[#10854d] text-sm font-semibold text-center hover:bg-green-50 transition-colors">
+                                    Create Customer Account
+                                </a>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
                 <?php endforeach; ?>
+            </div>
+            <div id="featuredNoResults" class="hidden mt-8 rounded-2xl border border-dashed border-green-200 bg-green-50 p-8 text-center">
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">No featured crop matched that search.</h3>
+                <p class="text-gray-600">Try another crop name, or open the full catalog after signing in.</p>
             </div>
             
             <!-- Mobile View All Link -->
@@ -654,6 +738,62 @@ try {
             <i class="fas fa-shopping-bag text-xl"></i>
         </a>
     </div>
+
+    <script>
+        const homepageSearchForm = document.getElementById('homepageSearchForm');
+        const homepageSearchInput = document.getElementById('homepageSearchInput');
+        const heroLanguageSelect = document.getElementById('heroLanguageSelect');
+        const featuredCards = document.querySelectorAll('[data-product-card]');
+        const featuredSearchStatus = document.getElementById('featuredSearchStatus');
+        const featuredNoResults = document.getElementById('featuredNoResults');
+
+        function filterFeaturedProducts(searchValue) {
+            const query = (searchValue || '').trim().toLowerCase();
+            let visibleCount = 0;
+
+            featuredCards.forEach((card) => {
+                const haystack = [
+                    card.dataset.productName || '',
+                    card.dataset.productCategory || '',
+                    card.dataset.productFarmer || ''
+                ].join(' ');
+
+                const matches = query === '' || haystack.includes(query);
+                card.style.display = matches ? '' : 'none';
+                if (matches) {
+                    visibleCount += 1;
+                }
+            });
+
+            if (featuredSearchStatus) {
+                featuredSearchStatus.textContent = query === ''
+                    ? 'Use the search bar above to narrow these featured crops instantly.'
+                    : visibleCount + ' featured crop' + (visibleCount === 1 ? '' : 's') + ' matched "' + searchValue.trim() + '".';
+            }
+
+            if (featuredNoResults) {
+                featuredNoResults.classList.toggle('hidden', visibleCount !== 0);
+            }
+        }
+
+        if (homepageSearchForm && homepageSearchInput) {
+            homepageSearchForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                filterFeaturedProducts(homepageSearchInput.value);
+                document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+
+            homepageSearchInput.addEventListener('input', () => {
+                filterFeaturedProducts(homepageSearchInput.value);
+            });
+        }
+
+        if (heroLanguageSelect) {
+            heroLanguageSelect.addEventListener('change', () => {
+                // UI only for now.
+            });
+        }
+    </script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";

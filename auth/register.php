@@ -57,6 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Step 1 Validation
     if ($step === 1 && isset($_POST['next'])) {
+        if (!in_array($formData['role'], ['customer', 'farmer', 'driver'], true)) {
+            $errors[] = "Please choose a valid account type";
+        }
         if (empty($formData['firstName'])) $errors[] = "First name is required";
         if (empty($formData['lastName'])) $errors[] = "Last name is required";
         if (empty($formData['username'])) $errors[] = "Username is required";
@@ -111,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         
-        if (isset($_POST['next'])) {
+        if (isset($_POST['submit'])) {
             if (empty($formData['password'])) {
                 $errors[] = "Password is required";
             } elseif (strlen($formData['password']) < 8) {
@@ -129,23 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($formData['password'] !== $formData['confirmPassword']) {
                 $errors[] = "Passwords do not match";
             }
-            
-            if (empty($errors)) {
-                $_SESSION['form_data'] = $formData;
-                header('Location: ?step=3');
-                exit;
-            }
-        }
-    }
-    
-    // Step 3 Validation and Registration
-    if ($step === 3) {
-        if (isset($_POST['back'])) {
-            header('Location: ?step=2');
-            exit;
-        }
-        
-        if (isset($_POST['submit'])) {
+
             if (!$formData['terms']) {
                 $errors[] = "You must agree to the terms and conditions";
             }
@@ -153,11 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($formData['phone'])) {
                 $errors[] = "Phone number is required";
             }
-            
-            if (empty($formData['address'])) {
-                $errors[] = "Address is required";
-            }
-            
+
             if ($formData['role'] === 'farmer' && empty($formData['farmName'])) {
                 $errors[] = "Farm name is required for farmers";
             }
@@ -167,7 +150,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if (empty($errors)) {
-                // Proceed to process_register.php
                 $_SESSION['form_data'] = $formData;
                 header('Location: process_register.php');
                 exit;
@@ -186,7 +168,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/font/lucide.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -217,20 +198,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Fixed icon alignment for all input fields */
+        /* Input wrapper – consistent icon alignment */
         .input-wrapper {
             position: relative;
             width: 100%;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
+            --field-top-offset: 0px;
+        }
+        .input-wrapper.has-label {
+            padding-top: 1.6rem;
+            --field-top-offset: 1.6rem;
         }
         
         .input-icon {
             position: absolute;
-            left: 16px;
-            top: 50%;
+            left: 14px;
+            top: calc(var(--field-top-offset) + 22px);
             transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             color: #9CA3AF;
             z-index: 10;
             pointer-events: none;
@@ -240,20 +226,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .input-icon svg {
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
         }
         
         .form-input {
             width: 100%;
-            padding: 14px 20px 14px 48px;
+            padding: 10px 16px 10px 42px;
             border: 1px solid #E5E7EB;
             border-radius: 9999px;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             transition: all 0.2s;
             background-color: white;
-            line-height: 1.5;
-            height: 52px;
+            line-height: 1.4;
+            height: 44px;
         }
         
         .form-input:focus {
@@ -262,71 +248,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 0 0 3px rgba(16, 133, 77, 0.1);
         }
         
-        /* Fix for select element */
         select.form-input {
             appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
             background-repeat: no-repeat;
-            background-position: right 16px center;
-            background-size: 16px;
+            background-position: right 14px center;
+            background-size: 14px;
         }
         
-        /* Password strength indicator */
+        /* Password strength */
         .password-strength {
-            height: 4px;
+            height: 3px;
             transition: all 0.3s ease;
-            margin-top: 8px;
+            margin-top: 6px;
             border-radius: 9999px;
             overflow: hidden;
         }
         
-        /* Role toggle styling */
-        .role-toggle-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 24px;
-        }
-        
-        .role-toggle {
-            background: #F3F4F6;
-            padding: 4px;
-            border-radius: 9999px;
-            display: inline-flex;
-            width: 100%;
-            max-width: 460px;
-        }
-        
-        .role-btn {
-            flex: 1;
-            padding: 12px 24px;
-            border-radius: 9999px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            transition: all 0.3s;
-            text-align: center;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-        }
-        
-        .role-btn.active {
-            background: white;
-            color: #10854d;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        
-        .role-btn:not(.active) {
-            color: #4B5563;
-        }
-        
-        .role-btn:not(.active):hover {
-            color: #1F2937;
-        }
-        
-        /* Button styles */
+        /* Buttons */
         .btn-primary {
             width: 100%;
-            padding: 14px 24px;
+            padding: 10px 18px;
             background-color: #10854d;
             color: white;
             font-weight: 700;
@@ -334,12 +276,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             transition: all 0.2s;
             border: none;
             cursor: pointer;
-            height: 52px;
-            font-size: 1rem;
+            height: 44px;
+            font-size: 0.9rem;
         }
         
         .btn-primary:hover {
@@ -347,7 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .btn-secondary {
-            padding: 14px 24px;
+            padding: 10px 18px;
             background-color: #e5e7eb;
             color: #374151;
             font-weight: 700;
@@ -355,38 +297,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             transition: all 0.2s;
             border: none;
             cursor: pointer;
-            height: 52px;
-            font-size: 1rem;
+            height: 44px;
+            font-size: 0.9rem;
         }
         
         .btn-secondary:hover {
             background-color: #d1d5db;
         }
         
-        /* Terms checkbox */
+        /* Terms */
         .terms-container {
             display: flex;
             align-items: flex-start;
-            gap: 12px;
-            margin: 16px 0;
+            gap: 10px;
+            margin: 14px 0;
         }
         
         .terms-checkbox {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             accent-color: #10854d;
             margin-top: 2px;
             flex-shrink: 0;
         }
         
         .terms-label {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             color: #374151;
-            line-height: 1.5;
+            line-height: 1.4;
         }
         
         .terms-label a {
@@ -398,145 +340,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .terms-label a:hover {
             text-decoration: underline;
         }
-        .map-container {
-            border: 1px solid #E5E7EB;
-            border-radius: 16px;
-            overflow: hidden;
-            height: 260px;
-            background: #f3f4f6;
-        }
-        .map-help {
-            font-size: 0.8rem;
-            color: #4B5563;
-            margin: 8px 0 2px 4px;
-        }
-        .map-search-results {
-            margin-top: 6px;
-            border: 1px solid #E5E7EB;
-            border-radius: 10px;
-            background: #fff;
-            max-height: 160px;
-            overflow-y: auto;
-        }
-        .map-search-item {
-            width: 100%;
-            text-align: left;
-            padding: 10px 12px;
-            font-size: 0.85rem;
+        
+        .field-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
             color: #374151;
-            border: 0;
-            background: #fff;
-            cursor: pointer;
-        }
-        .map-search-item:hover {
-            background: #f3f4f6;
-        }
-        .map-search-bar {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .map-search-input {
-            flex: 1;
-            border: 1px solid #D1D5DB;
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 0.9rem;
-        }
-        .map-search-input:focus {
-            border-color: #10854d;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(16, 133, 77, 0.1);
-        }
-        .map-search-btn {
-            border: 0;
-            border-radius: 10px;
-            background: #10854d;
-            color: #fff;
-            font-weight: 600;
-            padding: 10px 14px;
-            cursor: pointer;
-        }
-        .map-search-btn:hover {
-            background: #0d6e40;
+            margin: 0 0 4px 6px;
         }
         
-        /* Form container */
-        .form-container {
-            max-height: 600px;
-            overflow-y: auto;
-            padding-right: 8px;
+        .input-wrapper.has-label .field-label {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0 0 4px 6px;
         }
         
-        .form-container::-webkit-scrollbar {
-            width: 4px;
+        .input-wrapper.has-label .input-icon {
+            transform: translateY(-50%);
         }
         
-        .form-container::-webkit-scrollbar-thumb {
-            background: rgba(16, 133, 77, 0.3);
-            border-radius: 10px;
+        /* Social auth buttons – black text only */
+        .social-auth {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin: 12px 0 16px;
         }
         
-        /* Step indicator */
-        .step-indicator {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 32px;
-            padding: 0 8px;
-        }
-        
-        .step-item {
-            display: flex;
-            align-items: center;
-            flex: 1;
-        }
-        
-        .step-item:last-child {
-            flex: 0;
-        }
-        
-        .step-circle {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
+        .social-btn {
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            transition: all 0.3s;
-        }
-        
-        .step-circle.active {
-            background-color: #10854d;
-            color: white;
-        }
-        
-        .step-circle.inactive {
-            background-color: #e5e7eb;
-            color: #9ca3af;
-        }
-        
-        .step-line {
-            height: 4px;
-            flex: 1;
-            margin: 0 12px;
+            gap: 8px;
             border-radius: 9999px;
-            transition: all 0.3s;
+            border: 1px solid rgba(209, 213, 219, 0.95);
+            background: rgba(255, 255, 255, 0.96);
+            color: #000000; /* black text */
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 8px 12px;
+            transition: all 0.2s ease;
+        }
+        .social-btn svg,
+        .social-btn i,
+        .social-btn img {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            object-fit: contain;
+        }
+        .social-btn span {
+            line-height: 1;
         }
         
-        .step-line.active {
-            background-color: #10854d;
+        .social-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 16px -14px rgba(15, 23, 42, 0.45);
         }
         
-        .step-line.inactive {
-            background-color: #e5e7eb;
+        /* No red/blue overrides */
+        
+        .brand-tagline {
+            margin-top: 0.5rem;
+            color: #14532d;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-align: center;
+            text-transform: uppercase;
+            text-shadow: 0 2px 10px rgba(255, 255, 255, 0.45);
+            font-size: 0.7rem;
         }
         
-        /* Error message */
+        /* Error container */
         .error-container {
-            margin-bottom: 24px;
-            padding: 16px;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
             background-color: #fef2f2;
             border: 1px solid #fecaca;
             border-radius: 16px;
@@ -545,28 +427,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .error-title {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             color: #dc2626;
             font-weight: 700;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
         }
         
         .error-list {
             list-style-type: disc;
             list-style-position: inside;
             color: #dc2626;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
         }
         
         .error-list li {
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         
-        /* Button group */
         .button-group {
             display: flex;
-            gap: 12px;
-            margin-top: 24px;
+            gap: 10px;
+            margin-top: 18px;
         }
         
         .button-group .btn-secondary {
@@ -577,13 +459,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex: 2;
         }
         
-        /* Login link */
         .login-link {
             text-align: center;
             color: #374151;
-            font-size: 0.9rem;
-            margin-top: 24px;
-            padding-top: 20px;
+            font-size: 0.8rem;
+            margin-top: 18px;
+            padding-top: 14px;
             border-top: 1px solid rgba(255, 255, 255, 0.2);
         }
         
@@ -597,70 +478,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .login-link a:hover {
             text-decoration: underline;
         }
-        /* Base styles for all icons - keep as is */
-.input-icon {
-    position: absolute;
-    left: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    color: #9CA3AF;
-    z-index: 10;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-/* Target the password field wrapper and its icon */
-.password-field-wrapper .input-icon {
-    transform: translateY(-80%);
-    
-    
-    /* Also try these if transform doesn't work */
-    /* top: 20px; /* Adjust pixel value */
-    /* bottom: 10px; /* Adjust pixel value */
-}
-.password-field {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") !important;
-    background-repeat: no-repeat !important;
-    background-position: 16px center !important;
-    background-size: 20px !important;
-    padding-left: 48px !important;
-}
-/* Target only the username icon using its class */
-.username-icon {
-    transform: translateY(-96%) !important;  /* Adjust this value */
-    /* Try: -55%, -60%, -65% to move up more */
-}
+        
+        /* Form container – no scroll */
+        .form-container {
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+        }
+        
+        .grid-cols-1.md\:grid-cols-2 {
+            gap: 0.75rem;
+        }
+        
+        .logo-link {
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        .logo-link:hover {
+            transform: scale(1.02);
+        }
+        
+        .bottom-home-link {
+            text-align: center;
+            margin-top: 12px;
+        }
+        .bottom-home-link a {
+            font-size: 0.7rem;
+            color: #6b7280;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: color 0.2s;
+        }
+        .bottom-home-link a:hover {
+            color: #10854d;
+        }
+        
+        /* Password field uses background-image for lock icon, no extra icon span */
+        .password-field {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: 14px center !important;
+            background-size: 18px !important;
+            padding-left: 42px !important;
+        }
     </style>
 </head>
 <body>
     <div class="min-h-screen w-full flex items-center justify-center p-4 bg-cover bg-center bg-no-repeat bg-fixed" 
-         style="background-image: url('../assets/images/Farm.jpg');">
+         style="background-image: url('../assets/images/farm.jpg');">
         <div class="absolute inset-0 bg-gray-900/30"></div>
 
-        <div class="relative z-10 w-full max-w-5xl flex flex-col md:flex-row items-center gap-8 md:gap-12">
+        <div class="relative z-10 w-full max-w-5xl flex flex-col md:flex-row items-center gap-6 md:gap-8">
             
-            <!-- Left Side: Branding Box (Keep original, don't resize) -->
+            <!-- Left Side: Clickable Logo -->
             <div class="w-full md:w-5/12 flex justify-center items-center">
-                <div class="p-90 flex flex-col items-center justify-center transition-all hover:scale-105">
-                    <div class="relative mb-6">
-                        <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-100 h-100 object-contain">
+                <a href="../index.php" class="logo-link">
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="relative mb-2">
+                            <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-150 h-auto object-contain">
+                        </div>
+                        <p class="brand-tagline">Fresh from Farm to Table</p>
                     </div>
-                    <p class="mt-4 text-gray-600 font-medium text-center">Fresh from Farm to Table</p>
-                </div>
+                </a>
             </div>
 
-            <!-- Right Side: Registration Form - Fixed components inside -->
+            <!-- Right Side: Compact Registration Form -->
             <div class="w-full md:w-7/12">
-                <div class="bg-white/20 backdrop-blur-md rounded-[40px] p-8 md:p-10 shadow-2xl">
+                <div class="glass rounded-3xl p-5 md:p-6 shadow-2xl">
                     
                     <!-- Error Messages -->
                     <?php if (!empty($errors)): ?>
                     <div class="error-container">
                         <div class="error-title">
-                            <i data-lucide="alert-circle" width="20" height="20"></i>
+                            <i data-lucide="alert-circle" width="16" height="16"></i>
                             <span>Please fix the following errors:</span>
                         </div>
                         <ul class="error-list">
@@ -671,46 +563,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <?php endif; ?>
 
-                    <!-- Progress Header -->
-                    <div class="step-indicator">
-                        <?php for ($s = 1; $s <= 3; $s++): ?>
-                            <div class="step-item">
-                                <div class="step-circle <?php echo $step >= $s ? 'active' : 'inactive'; ?>">
-                                    <?php if ($step > $s): ?>
-                                        <i data-lucide="check" width="20" height="20"></i>
-                                    <?php else: ?>
-                                        <?php echo $s; ?>
-                                    <?php endif; ?>
-                                </div>
-                                <?php if ($s < 3): ?>
-                                    <div class="step-line <?php echo $step > $s ? 'active' : 'inactive'; ?>"></div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endfor; ?>
-                    </div>
-
-                    <!-- Form Container -->
                     <div class="form-container">
                         <!-- Step 1: Account Information -->
                         <?php if ($step === 1): ?>
                             <form method="POST" action="">
-                                <h2 class="text-2xl font-bold text-gray-800 mb-6">Account Information</h2>
+                                <h2 class="text-xl font-bold text-gray-800 mb-4">Account Information</h2>
                                 
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <!-- First Name -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div class="input-wrapper">
                                         <span class="input-icon">
-                                            <i data-lucide="user" width="20" height="20"></i>
+                                            <i data-lucide="user" width="16" height="16"></i>
                                         </span>
                                         <input type="text" name="firstName" placeholder="First Name" 
                                                value="<?php echo htmlspecialchars($formData['firstName']); ?>" 
                                                class="form-input" required>
                                     </div>
-                                    
-                                    <!-- Last Name -->
                                     <div class="input-wrapper">
                                         <span class="input-icon">
-                                            <i data-lucide="user" width="20" height="20"></i>
+                                            <i data-lucide="user" width="16" height="16"></i>
                                         </span>
                                         <input type="text" name="lastName" placeholder="Last Name" 
                                                value="<?php echo htmlspecialchars($formData['lastName']); ?>" 
@@ -718,134 +588,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </div>
                                 </div>
                                 
-                                <!-- Username - Fixed icon alignment -->
-                                <div class="input-wrapper">
-    <span class="input-icon username-icon">  <!-- Added "username-icon" class -->
-        <i data-lucide="layout-grid" width="20" height="20"></i>
-    </span>
-    <input type="text" name="username" placeholder="Username" 
-           value="<?php echo htmlspecialchars($formData['username']); ?>" 
-           class="form-input" required>
-    <p class="text-xs text-gray-500 mt-1 ml-4">Only letters, numbers, and underscores</p>
-</div>  
-                                
-                                <!-- Email -->
                                 <div class="input-wrapper">
                                     <span class="input-icon">
-                                        <i data-lucide="mail" width="20" height="20"></i>
+                                        <i data-lucide="layout-grid" width="16" height="16"></i>
+                                    </span>
+                                    <input type="text" name="username" placeholder="Username" 
+                                           value="<?php echo htmlspecialchars($formData['username']); ?>" 
+                                           class="form-input" required>
+                                    <p class="text-xs text-gray-500 mt-1 ml-4">Letters, numbers, underscores only</p>
+                                </div>  
+                                
+                                <div class="input-wrapper">
+                                    <span class="input-icon">
+                                        <i data-lucide="mail" width="16" height="16"></i>
                                     </span>
                                     <input type="email" name="email" placeholder="Email Address" 
                                            value="<?php echo htmlspecialchars($formData['email']); ?>" 
                                            class="form-input" required>
                                 </div>
+
+                                <div class="input-wrapper has-label">
+                                    <label for="roleInput" class="field-label">Sign up as</label>
+                                    <span class="input-icon">
+                                        <i data-lucide="users" width="16" height="16"></i>
+                                    </span>
+                                    <select name="role" id="roleInput" class="form-input" onchange="setRole(this.value)" required>
+                                        <option value="customer" <?php echo ($formData['role'] ?? 'customer') === 'customer' ? 'selected' : ''; ?>>Customer</option>
+                                        <option value="farmer" <?php echo ($formData['role'] ?? 'customer') === 'farmer' ? 'selected' : ''; ?>>Farmer</option>
+                                        <option value="driver" <?php echo ($formData['role'] ?? 'customer') === 'driver' ? 'selected' : ''; ?>>Driver</option>
+                                    </select>
+                                </div>
                                 
+                                <div class="social-auth">
+                                    <button type="button" class="social-btn google">
+                                        <img src="../assets/images/google.png" alt="Google"><span>Google</span>
+                                    </button>
+                                    <button type="button" class="social-btn facebook">
+                                        <img src="../assets/images/facebook.png" alt="Facebook"><span>Facebook</span>
+                                    </button>
+                                </div>
+
                                 <button type="submit" name="next" class="btn-primary">
-                                    NEXT STEP <i data-lucide="chevron-right" width="20" height="20"></i>
+                                    NEXT STEP <i data-lucide="chevron-right" width="16" height="16"></i>
                                 </button>
                             </form>
 
-                       <!-- Step 2: Security & Contact - Fixed with password icon adjustment -->
-<?php elseif ($step === 2): ?>
-    <form method="POST" action="" id="step2Form">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6">Security & Contact</h2>
-        
-        <!-- Password Field - Icon can be adjusted here -->
-        <!-- Password Field - FIXED - Icon won't move -->
-<div class="input-wrapper">
-    <input type="password" name="password" id="password" placeholder="Password" 
-           class="form-input password-field" required>  <!-- Added password-field class -->
-    <!-- Password strength indicator -->
-    <div class="password-strength w-full bg-gray-200">
-        <div id="strengthBar" class="h-1 bg-gray-300" style="width: 0%"></div>
-    </div>
-    <p id="strengthText" class="text-xs mt-1 ml-4 text-gray-500"></p>
-</div>
-        
-        <!-- Confirm Password - Icon stays at default position -->
-        <div class="input-wrapper">
-            <span class="input-icon">
-                <i data-lucide="lock" width="20" height="20"></i>
-            </span>
-            <input type="password" name="confirmPassword" placeholder="Confirm Password" 
-                   class="form-input" required>
-        </div>
-        
-        <!-- Phone - Icon stays at default position -->
-        <div class="input-wrapper">
-            <span class="input-icon">
-                <i data-lucide="phone" width="20" height="20"></i>
-            </span>
-            <input type="tel" name="phone" placeholder="Phone Number" 
-                   value="<?php echo htmlspecialchars($formData['phone']); ?>" 
-                   class="form-input" required>
-        </div>
-        
-        <div class="button-group">
-            <button type="submit" name="back" class="btn-secondary">
-                <i data-lucide="chevron-left" width="20" height="20"></i> BACK
-            </button>
-            <button type="submit" name="next" class="btn-primary">
-                CONTINUE <i data-lucide="chevron-right" width="20" height="20"></i>
-            </button>
-        </div>
-    </form>
-
-                        <!-- Step 3: Final Details -->
+                        <!-- Step 2: Security & Contact -->
                         <?php else: ?>
-                            <form method="POST" action="">
-                                <h2 class="text-2xl font-bold text-gray-800 mb-6">Final Details</h2>
-                                
-                                <!-- Role Toggle -->
-                                <div class="role-toggle-container">
-                                    <div class="role-toggle">
-                                        <button type="button" onclick="setRole('customer')" 
-                                                class="role-btn <?php echo ($formData['role'] ?? 'customer') === 'customer' ? 'active' : ''; ?>">
-                                            CUSTOMER
-                                        </button>
-                                        <button type="button" onclick="setRole('farmer')" 
-                                                class="role-btn <?php echo ($formData['role'] ?? 'customer') === 'farmer' ? 'active' : ''; ?>">
-                                            FARMER
-                                        </button>
-                                        <button type="button" onclick="setRole('driver')" 
-                                                class="role-btn <?php echo ($formData['role'] ?? 'customer') === 'driver' ? 'active' : ''; ?>">
-                                            DRIVER
-                                        </button>
+                            <form method="POST" action="" id="step2Form">
+                                <h2 class="text-xl font-bold text-gray-800 mb-1">Security & Contact</h2>
+                                <p class="text-xs text-gray-500 mb-4">Address setup will be managed separately after sign-up.</p>
+
+                                <div class="input-wrapper">
+                                    <input type="password" name="password" id="password" placeholder="Password" 
+                                           class="form-input password-field" required>
+                                    <div class="password-strength w-full bg-gray-200">
+                                        <div id="strengthBar" class="h-1 bg-gray-300" style="width: 0%"></div>
                                     </div>
-                                    <input type="hidden" name="role" id="roleInput" value="<?php echo $formData['role'] ?? 'customer'; ?>">
+                                    <p id="strengthText" class="text-xs mt-1 ml-4 text-gray-500"></p>
                                 </div>
 
-                                <!-- Address -->
                                 <div class="input-wrapper">
                                     <span class="input-icon">
-                                        <i data-lucide="map-pin" width="20" height="20"></i>
+                                        <i data-lucide="lock" width="16" height="16"></i>
                                     </span>
-                                    <input type="text" id="addressInput" name="address" placeholder="Complete Address" 
-                                           value="<?php echo htmlspecialchars($formData['address']); ?>" 
+                                    <input type="password" name="confirmPassword" placeholder="Confirm Password" 
                                            class="form-input" required>
                                 </div>
-                                <input type="hidden" id="latitudeInput" name="latitude" value="<?php echo htmlspecialchars($formData['latitude']); ?>">
-                                <input type="hidden" id="longitudeInput" name="longitude" value="<?php echo htmlspecialchars($formData['longitude']); ?>">
-                                <div class="map-help">Pin your exact delivery location using OpenStreetMap. You can click on map, drag marker, or search the address.</div>
-                                <div class="map-search-bar">
-                                    <input type="text" id="mapSearchInput" class="map-search-input" placeholder="Search location (barangay, street, city)">
-                                    <button type="button" id="mapSearchBtn" class="map-search-btn">Search</button>
-                                </div>
-                                <div id="mapSearchResults" class="map-search-results" style="display: none;"></div>
-                                <div class="map-container" id="registerMap"></div>
 
-                                <!-- Farmer Fields -->
+                                <div class="input-wrapper">
+                                    <span class="input-icon">
+                                        <i data-lucide="phone" width="16" height="16"></i>
+                                    </span>
+                                    <input type="tel" name="phone" placeholder="Phone Number" 
+                                           value="<?php echo htmlspecialchars($formData['phone']); ?>" 
+                                           class="form-input" required>
+                                </div>
+
                                 <div id="farmerFields" style="<?php echo ($formData['role'] ?? 'customer') === 'farmer' ? '' : 'display: none;'; ?>">
                                     <div class="input-wrapper">
                                         <span class="input-icon">
-                                            <i data-lucide="briefcase" width="20" height="20"></i>
+                                            <i data-lucide="briefcase" width="16" height="16"></i>
                                         </span>
-                                        <input type="text" name="farmName" placeholder="Farm Name" 
+                                        <input type="text" name="farmName" placeholder="Farm or store name" 
                                                value="<?php echo htmlspecialchars($formData['farmName']); ?>" 
                                                class="form-input">
                                     </div>
                                 </div>
 
-                                <!-- Terms Checkbox -->
                                 <div class="terms-container">
                                     <input type="checkbox" id="terms" name="terms" <?php echo $formData['terms'] ? 'checked' : ''; ?> 
                                            class="terms-checkbox" required>
@@ -856,8 +686,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
 
                                 <div class="button-group">
-                                    <button type="submit" name="back" class="btn-secondary">
-                                        <i data-lucide="chevron-left" width="20" height="20"></i> BACK
+                                    <button type="submit" name="back" class="btn-secondary" formnovalidate>
+                                        <i data-lucide="chevron-left" width="16" height="16"></i> BACK
                                     </button>
                                     <button type="submit" name="submit" class="btn-primary">
                                         FINISH & SIGN UP
@@ -871,6 +701,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             Already a member? 
                             <a href="login.php">Log in</a>
                         </p>
+                        
+                        <!-- Subtle home link at bottom -->
+                        <div class="bottom-home-link">
+                            <a href="../index.php">
+                                <i data-lucide="arrow-left" width="12" height="12"></i> Back to Home
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -879,194 +716,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
-        // Initialize Lucide icons
         lucide.createIcons();
 
-        let registerMap = null;
-        let registerMarker = null;
-        let searchDebounceTimer = null;
-
-        function updateLatLngInputs(lat, lng) {
-            const latInput = document.getElementById('latitudeInput');
-            const lngInput = document.getElementById('longitudeInput');
-            if (!latInput || !lngInput) return;
-            latInput.value = Number(lat).toFixed(8);
-            lngInput.value = Number(lng).toFixed(8);
-        }
-
-        function reverseGeocode(lat, lng) {
-            const addressInput = document.getElementById('addressInput');
-            if (!addressInput) return;
-
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.display_name && !addressInput.matches(':focus')) {
-                        addressInput.value = data.display_name;
-                    }
-                })
-                .catch(() => {});
-        }
-
-        function hideSearchResults() {
-            const box = document.getElementById('mapSearchResults');
-            if (!box) return;
-            box.style.display = 'none';
-            box.innerHTML = '';
-        }
-
-        function renderSearchResults(results) {
-            const box = document.getElementById('mapSearchResults');
-            if (!box) return;
-
-            if (!Array.isArray(results) || results.length === 0) {
-                hideSearchResults();
-                return;
-            }
-
-            box.innerHTML = '';
-            results.slice(0, 5).forEach(item => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'map-search-item';
-                btn.textContent = item.display_name || 'Unknown location';
-                btn.addEventListener('click', function() {
-                    const lat = parseFloat(item.lat);
-                    const lng = parseFloat(item.lon);
-                    if (isNaN(lat) || isNaN(lng) || !registerMap || !registerMarker) return;
-                    registerMap.setView([lat, lng], 16);
-                    registerMarker.setLatLng([lat, lng]);
-                    updateLatLngInputs(lat, lng);
-                    const addressInput = document.getElementById('addressInput');
-                    if (addressInput) {
-                        addressInput.value = item.display_name || addressInput.value;
-                    }
-                    hideSearchResults();
-                });
-                box.appendChild(btn);
-            });
-            box.style.display = 'block';
-        }
-
-        function searchAddress(address) {
-            if (!address || address.length < 4) {
-                hideSearchResults();
-                return;
-            }
-            fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ph&limit=5&q=${encodeURIComponent(address)}`)
-                .then(response => response.json())
-                .then(data => renderSearchResults(data))
-                .catch(() => hideSearchResults());
-        }
-
-        function initRegisterMap() {
-            const mapEl = document.getElementById('registerMap');
-            const addressInput = document.getElementById('addressInput');
-            const mapSearchInput = document.getElementById('mapSearchInput');
-            const mapSearchBtn = document.getElementById('mapSearchBtn');
-            const latInput = document.getElementById('latitudeInput');
-            const lngInput = document.getElementById('longitudeInput');
-            if (!mapEl || !addressInput || typeof L === 'undefined') return;
-
-            const defaultLat = 14.5995;
-            const defaultLng = 120.9842;
-            const savedLat = parseFloat(latInput?.value || '');
-            const savedLng = parseFloat(lngInput?.value || '');
-            const initialLat = (!isNaN(savedLat)) ? savedLat : defaultLat;
-            const initialLng = (!isNaN(savedLng)) ? savedLng : defaultLng;
-            const initialZoom = (!isNaN(savedLat) && !isNaN(savedLng)) ? 16 : 12;
-
-            registerMap = L.map('registerMap').setView([initialLat, initialLng], initialZoom);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(registerMap);
-
-            registerMarker = L.marker([initialLat, initialLng], { draggable: true }).addTo(registerMap);
-            updateLatLngInputs(initialLat, initialLng);
-
-            registerMarker.on('dragend', function(event) {
-                const pos = event.target.getLatLng();
-                updateLatLngInputs(pos.lat, pos.lng);
-                reverseGeocode(pos.lat, pos.lng);
-            });
-
-            registerMap.on('click', function(event) {
-                const lat = event.latlng.lat;
-                const lng = event.latlng.lng;
-                registerMarker.setLatLng([lat, lng]);
-                updateLatLngInputs(lat, lng);
-                reverseGeocode(lat, lng);
-            });
-
-            addressInput.addEventListener('input', function() {
-                clearTimeout(searchDebounceTimer);
-                searchDebounceTimer = setTimeout(() => searchAddress(addressInput.value.trim()), 400);
-            });
-
-            addressInput.addEventListener('blur', function() {
-                setTimeout(() => hideSearchResults(), 150);
-            });
-
-            if (mapSearchBtn && mapSearchInput) {
-                mapSearchBtn.addEventListener('click', function() {
-                    searchAddress(mapSearchInput.value.trim());
-                });
-
-                mapSearchInput.addEventListener('keydown', function(event) {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        searchAddress(mapSearchInput.value.trim());
-                    }
-                });
-            }
-        }
-
-        // Role toggle functionality
         function setRole(role) {
-            document.getElementById('roleInput').value = role;
-            
-            // Update button styles
-            document.querySelectorAll('.role-btn').forEach(btn => {
-                if (btn.textContent.trim().toLowerCase() === role) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
-            
-            // Show/hide farmer fields
+            const roleInput = document.getElementById('roleInput');
+            if (roleInput) roleInput.value = role;
             const farmerFields = document.getElementById('farmerFields');
-            if (farmerFields) {
-                farmerFields.style.display = role === 'farmer' ? 'block' : 'none';
-            }
+            if (farmerFields) farmerFields.style.display = role === 'farmer' ? 'block' : 'none';
         }
 
-        // Password strength checker
         const passwordInput = document.getElementById('password');
         if (passwordInput) {
             passwordInput.addEventListener('input', function(e) {
                 const password = e.target.value;
                 const strengthBar = document.getElementById('strengthBar');
                 const strengthText = document.getElementById('strengthText');
-                
                 let strength = 0;
-                
-                // Length check
                 if (password.length >= 8) strength += 25;
-                
-                // Lowercase check
                 if (password.match(/[a-z]/)) strength += 25;
-                
-                // Uppercase check
                 if (password.match(/[A-Z]/)) strength += 25;
-                
-                // Number check
                 if (password.match(/[0-9]/)) strength += 25;
-                
                 strengthBar.style.width = strength + '%';
-                
-                // Update colors and text
                 if (strength <= 25) {
                     strengthBar.className = 'h-1 bg-red-500';
                     strengthText.textContent = 'Weak password';
@@ -1088,11 +758,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            if (document.getElementById('registerMap') && typeof L !== 'undefined') {
-                initRegisterMap();
-            }
+            const roleInput = document.getElementById('roleInput');
+            if (roleInput) setRole(roleInput.value || 'customer');
         });
     </script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </body>
 </html>

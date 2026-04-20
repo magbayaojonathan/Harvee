@@ -202,6 +202,9 @@ try {
                     <a href="orders.php" class="text-gray-700 font-medium hover:text-[#10854d] transition-colors">
                         <i class="fas fa-clipboard-list mr-1"></i> My Orders
                     </a>
+                    <a href="addresses.php" class="text-gray-700 font-medium hover:text-[#10854d] transition-colors">
+                        <i class="fas fa-map-marker-alt mr-1"></i> Addresses
+                    </a>
                 </div>
 
                 <!-- Right Section - Profile Only -->
@@ -228,6 +231,9 @@ try {
                             </div>
                             <a href="profile.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-user mr-2"></i> My Profile
+                            </a>
+                            <a href="addresses.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-map-marker-alt mr-2"></i> My Addresses
                             </a>
                             <a href="../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
                                 <i class="fas fa-sign-out-alt mr-2"></i> Logout

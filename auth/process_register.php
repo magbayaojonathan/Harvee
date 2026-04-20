@@ -66,10 +66,6 @@ if (empty($phone)) {
     $errors[] = "Phone number is required";
 }
 
-if (empty($address)) {
-    $errors[] = "Address is required";
-}
-
 if ($latitude !== '' && (!is_numeric($latitude) || (float)$latitude < -90 || (float)$latitude > 90)) {
     $errors[] = "Invalid latitude value";
 }
@@ -90,7 +86,7 @@ if (!in_array($role, ['customer', 'farmer', 'driver'])) {
 if (!empty($errors)) {
     $_SESSION['register_errors'] = $errors;
     $_SESSION['form_data'] = $formData;
-    header('Location: register.php?step=3');
+    header('Location: register.php?step=2');
     exit;
 }
 

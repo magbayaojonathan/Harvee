@@ -473,6 +473,9 @@ try {
                             <a href="profile.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-user mr-2"></i> My Profile
                             </a>
+                            <a href="addresses.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-map-marker-alt mr-2"></i> My Addresses
+                            </a>
                             <a href="orders.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-shopping-bag mr-2"></i> My Orders
                             </a>
