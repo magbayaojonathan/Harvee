@@ -207,9 +207,7 @@ try {
             <div class="flex items-center justify-between h-16">
                 <!-- Logo -->
                 <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-xl">H</span>
-                    </div>
+                    <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                     <span class="text-xl font-bold gradient-text">Harvee Farm</span>
                 </a>
                 
@@ -582,9 +580,7 @@ try {
             <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
                 <div>
                     <div class="flex items-center space-x-2 mb-4">
-                        <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                            <span class="text-white font-bold text-xl">H</span>
-                        </div>
+                        <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                         <span class="text-xl font-bold gradient-text">Harvee Farm</span>
                     </div>
                     <p class="text-gray-600 text-sm">Empowering farmers to reach more customers with fresh, quality products.</p>

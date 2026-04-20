@@ -251,9 +251,7 @@ try {
         <div class="container mx-auto px-4">
             <div class="h-16 flex items-center justify-between gap-4">
                 <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold">H</span>
-                    </div>
+                    <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                     <span class="text-xl font-extrabold text-[#10854d] tracking-wide">Harvee Driver</span>
                 </a>
 

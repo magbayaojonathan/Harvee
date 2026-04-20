@@ -115,15 +115,7 @@ try {
             position: relative;
             overflow: hidden;
         }
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #10854d, #4ade80);
-        }
+        
         .welcome-banner {
             background: linear-gradient(135deg, #10854d 0%, #0d6e40 50%, #059669 100%);
             position: relative;
@@ -187,9 +179,7 @@ try {
             <div class="flex items-center justify-between h-16">
                 <!-- Logo -->
                 <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-xl">H</span>
-                    </div>
+                    <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                     <span class="text-xl font-bold gradient-text">Harvee</span>
                 </a>
                 
@@ -496,15 +486,6 @@ try {
                             <i class="fas fa-chevron-right text-gray-400 text-sm group-hover:text-yellow-600"></i>
                         </a>
                         
-                        <a href="browse.php?category=Poultry" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50 transition-all group">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                                    <i class="fas fa-drumstick-bite text-red-600"></i>
-                                </div>
-                                <span class="font-medium text-gray-700 group-hover:text-red-600">Poultry</span>
-                            </div>
-                            <i class="fas fa-chevron-right text-gray-400 text-sm group-hover:text-red-600"></i>
-                        </a>
                         
                         <a href="browse.php?category=Dairy" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-all group">
                             <div class="flex items-center space-x-3">
@@ -545,9 +526,7 @@ try {
                 <!-- Company Info -->
                 <div>
                     <div class="flex items-center space-x-2 mb-4">
-                        <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                            <span class="text-[#10854d] font-bold text-xl">H</span>
-                        </div>
+                        <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                         <span class="text-xl font-bold text-white">Harvee Market</span>
                     </div>
                     <p class="text-gray-300 text-sm mb-4">
@@ -584,7 +563,7 @@ try {
                         <li><a href="browse.php?category=Vegetables" class="text-gray-300 hover:text-white transition-colors"><i class="fas fa-chevron-right text-xs mr-2"></i>Vegetables</a></li>
                         <li><a href="browse.php?category=Fruits" class="text-gray-300 hover:text-white transition-colors"><i class="fas fa-chevron-right text-xs mr-2"></i>Fruits</a></li>
                         <li><a href="browse.php?category=Grains" class="text-gray-300 hover:text-white transition-colors"><i class="fas fa-chevron-right text-xs mr-2"></i>Grains</a></li>
-                        <li><a href="browse.php?category=Poultry" class="text-gray-300 hover:text-white transition-colors"><i class="fas fa-chevron-right text-xs mr-2"></i>Poultry</a></li>
+                        <li><a href="browse.php?category=Dairy" class="text-gray-300 hover:text-white transition-colors"><i class="fas fa-chevron-right text-xs mr-2"></i>Dairy</a></li>
                     </ul>
                 </div>
 
