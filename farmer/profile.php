@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once '../config/database.php';
+require_once '../shared/profile_photo.php';
 
 // Check if user is logged in as farmer
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
@@ -23,6 +24,25 @@ $user = $stmt->fetch();
 
 // Handle profile update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['update_photo'])) {
+        $result = harvee_handle_profile_photo_upload(
+            $pdo,
+            (int)$user_id,
+            $_FILES['profile_photo'] ?? [],
+            (string)($user['profile_image'] ?? '')
+        );
+        $message = (string)$result['message'];
+        $message_type = $result['ok'] ? 'success' : 'error';
+
+        if (!empty($result['ok']) && !empty($result['path'])) {
+            $_SESSION['profile_image'] = (string)$result['path'];
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch();
+    }
+
     if (isset($_POST['update_profile'])) {
         $first_name = trim($_POST['first_name'] ?? '');
         $last_name = trim($_POST['last_name'] ?? '');
@@ -205,6 +225,7 @@ $recent_orders = $stmt->fetchAll();
 
 // Member since
 $member_since = date('F Y', strtotime($user['created_at']));
+$profile_photo_url = harvee_profile_photo_url((string)($user['profile_image'] ?? ''), '../');
 ?>
 
 <!DOCTYPE html>
@@ -291,16 +312,26 @@ $member_since = date('F Y', strtotime($user['created_at']));
             <!-- Profile Sidebar -->
             <div class="lg:w-1/3">
                 <div class="profile-sidebar rounded-xl shadow-lg overflow-hidden sticky top-20">
-                    <!-- Profile Header -->
-                    <div class="p-6 text-center text-white">
-                        <div class="w-24 h-24 bg-white rounded-full mx-auto mb-4 flex items-center justify-center">
-                            <span class="text-3xl font-bold text-[#10854d]">
-                                <?php echo strtoupper(substr($user['first_name'] ?? $user['name'] ?? 'F', 0, 1)); ?>
-                            </span>
-                        </div>
-                        <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['first_name'] ?? $user['name'] ?? 'Farmer'); ?></h2>
-                        <p class="text-green-100 text-sm mb-2">Farmer</p>
-                        <p class="text-green-100 text-sm mb-4">Member since <?php echo $member_since; ?></p>
+	                    <!-- Profile Header -->
+	                    <div class="p-6 text-center text-white">
+	                        <div class="w-24 h-24 bg-white rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
+	                            <?php if ($profile_photo_url !== ''): ?>
+	                                <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-full h-full object-cover">
+	                            <?php else: ?>
+	                                <span class="text-3xl font-bold text-[#10854d]">
+	                                    <?php echo strtoupper(substr($user['first_name'] ?? $user['name'] ?? 'F', 0, 1)); ?>
+	                                </span>
+	                            <?php endif; ?>
+	                        </div>
+	                        <form method="POST" action="" enctype="multipart/form-data" class="mb-4">
+	                            <input type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp" class="block w-full text-xs text-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-white/20 file:text-white hover:file:bg-white/30" required>
+	                            <button type="submit" name="update_photo" class="mt-2 w-full px-3 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition-colors">
+	                                Update Photo
+	                            </button>
+	                        </form>
+	                        <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['first_name'] ?? $user['name'] ?? 'Farmer'); ?></h2>
+	                        <p class="text-green-100 text-sm mb-2">Farmer</p>
+	                        <p class="text-green-100 text-sm mb-4">Member since <?php echo $member_since; ?></p>
                         
                         <!-- Farm Stats -->
                         <div class="grid grid-cols-2 gap-3 pt-4 border-t border-green-600">

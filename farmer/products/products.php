@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once '../../config/database.php';
+require_once '../../shared/demo_data.php';
+require_once '../../shared/profile_photo.php';
 
 // Check if user is logged in as farmer/admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION['role'] !== 'admin')) {
@@ -10,6 +12,23 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION
 
 $user_id = $_SESSION['user_id'];
 $message = '';
+$using_demo_products = false;
+
+$profile_image_value = (string)($_SESSION['profile_image'] ?? '');
+if (($profile_image_value === '' || $profile_image_value === 'default-avatar.png') && isset($pdo, $_SESSION['user_id'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT profile_image FROM users WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $profile_image_value = (string)($row['profile_image'] ?? '');
+        if ($profile_image_value !== '' && $profile_image_value !== 'default-avatar.png') {
+            $_SESSION['profile_image'] = $profile_image_value;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+$profile_photo_url = harvee_profile_photo_url($profile_image_value, '../../');
 
 // Handle actions (delete, update stock, update price)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -147,6 +166,21 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
+// Only show demo products when this farmer truly has no products yet
+$real_product_count = 0;
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE farmer_id = ?");
+    $count_stmt->execute([$user_id]);
+    $real_product_count = (int)$count_stmt->fetchColumn();
+} catch (PDOException $e) {
+    $real_product_count = 0;
+}
+
+if ($real_product_count === 0) {
+    $products = harvee_demo_products_with_image_base('../../assets/images');
+    $using_demo_products = true;
+}
+
 // Get total counts for stats
 $total_products = count($products);
 
@@ -250,17 +284,21 @@ try {
                         <i class="fas fa-plus mr-2"></i> Add New
                     </a>
                     
-                    <div class="relative group">
-                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
-                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center">
-                                <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'F', 0, 1)); ?>
-                                </span>
-                            </div>
-                            <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'Farmer'); ?>
-                            </span>
-                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                    <div class="relative group">
+	                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
+	                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center overflow-hidden">
+	                                <?php if ($profile_photo_url !== ''): ?>
+	                                    <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-8 h-8 object-cover">
+	                                <?php else: ?>
+	                                    <span class="text-white font-bold text-sm">
+	                                        <?php echo strtoupper(substr($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'F', 0, 1)); ?>
+	                                    </span>
+	                                <?php endif; ?>
+	                            </div>
+	                            <span class="hidden md:inline text-gray-700 font-medium">
+	                                <?php echo htmlspecialchars($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'Farmer'); ?>
+	                            </span>
+	                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
@@ -468,6 +506,7 @@ try {
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach ($products as $product): 
                                 $stock = $product['stock_quantity'] ?? 0;
+                                $is_demo = !empty($product['is_demo']);
                                 $stock_class = '';
                                 $stock_status = '';
                                 
@@ -485,8 +524,15 @@ try {
                                 <tr class="product-row <?php echo $stock_class; ?>">
                                     <td class="py-4 px-6">
                                         <div class="flex items-center">
-                                            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-4">
-                                                <i class="fas fa-seedling text-gray-400"></i>
+                                            <?php $thumb = trim($product['image_url'] ?? ''); ?>
+                                            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-4 overflow-hidden">
+                                                <?php if ($thumb !== ''): ?>
+                                                    <img src="<?php echo htmlspecialchars($thumb); ?>"
+                                                         alt="<?php echo htmlspecialchars($product['name'] ?? 'Product'); ?>"
+                                                         class="w-10 h-10 object-cover">
+                                                <?php else: ?>
+                                                    <i class="fas fa-seedling text-gray-400"></i>
+                                                <?php endif; ?>
                                             </div>
                                             <div>
                                                 <h4 class="font-medium text-gray-800"><?php echo htmlspecialchars($product['name'] ?? 'Unnamed Product'); ?></h4>

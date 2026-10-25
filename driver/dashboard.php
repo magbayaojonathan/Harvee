@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
+require_once '../shared/profile_photo.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'driver') {
     header('Location: ../auth/login.php');
@@ -12,6 +14,27 @@ $driver_name = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_nam
 if ($driver_name === '') {
     $driver_name = $_SESSION['name'] ?? 'Driver';
 }
+$driver_initial = strtoupper(substr(trim($driver_name), 0, 1));
+$driver_first = trim((string)($_SESSION['first_name'] ?? ''));
+if ($driver_first === '') {
+    $driver_first = strtok($driver_name, ' ') ?: $driver_name;
+}
+
+$profile_image_value = (string)($_SESSION['profile_image'] ?? '');
+if (($profile_image_value === '' || $profile_image_value === 'default-avatar.png') && isset($pdo, $_SESSION['user_id'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT profile_image FROM users WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $profile_image_value = (string)($row['profile_image'] ?? '');
+        if ($profile_image_value !== '' && $profile_image_value !== 'default-avatar.png') {
+            $_SESSION['profile_image'] = $profile_image_value;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+$profile_photo_url = harvee_profile_photo_url($profile_image_value, '../');
 
 $message = '';
 $message_type = '';
@@ -32,8 +55,188 @@ function map_status_badge(string $status): string {
     }
 }
 
+function demo_driver_default_state(): array
+{
+    return [
+        'available' => harvee_demo_driver_available_orders(),
+        'active' => [],
+        'delivered' => [],
+    ];
+}
+
+function demo_driver_load_state(): array
+{
+    $state = $_SESSION['demo_driver_state'] ?? null;
+    if (!is_array($state)) {
+        $state = demo_driver_default_state();
+        $_SESSION['demo_driver_state'] = $state;
+        return $state;
+    }
+
+    $state['available'] = (isset($state['available']) && is_array($state['available'])) ? $state['available'] : [];
+    $state['active'] = (isset($state['active']) && is_array($state['active'])) ? $state['active'] : [];
+    $state['delivered'] = (isset($state['delivered']) && is_array($state['delivered'])) ? $state['delivered'] : [];
+
+    return $state;
+}
+
+function demo_driver_save_state(array $state): void
+{
+    $_SESSION['demo_driver_state'] = $state;
+}
+
+function demo_driver_find_and_remove(array &$list, string $order_number): ?array
+{
+    foreach ($list as $idx => $row) {
+        if (($row['order_number'] ?? '') === $order_number) {
+            $item = $row;
+            array_splice($list, $idx, 1);
+            return $item;
+        }
+    }
+    return null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        $is_demo_action = !empty($_POST['is_demo']);
+        $demo_order_number = trim((string)($_POST['order_number'] ?? ''));
+
+        if ($is_demo_action && $demo_order_number !== '') {
+            $state = demo_driver_load_state();
+
+            if (isset($_POST['claim_delivery'])) {
+                $order = demo_driver_find_and_remove($state['available'], $demo_order_number);
+                if ($order) {
+                    $order['order_status'] = 'processing';
+                    $order['delivery_claimed_at'] = date('Y-m-d H:i:s');
+                    $order['delivery_driver_id'] = $driver_id;
+
+                    // Add fields expected by the active-deliveries UI
+                    $order['farmer_first_name'] = 'Harvee';
+                    $order['farmer_last_name'] = 'Farm';
+                    $order['farmer_address'] = 'Public Market Road, City Center';
+                    $order['farmer_latitude'] = 10.3157;
+                    $order['farmer_longitude'] = 123.8854;
+                    $order['customer_latitude'] = 10.3165;
+                    $order['customer_longitude'] = 123.8907;
+
+                    array_unshift($state['active'], $order);
+                    demo_driver_save_state($state);
+
+                    $message = 'Delivery assigned to you successfully.';
+                    $message_type = 'success';
+                } else {
+                    $message = 'This order is not available anymore.';
+                    $message_type = 'error';
+                }
+            }
+
+            if (isset($_POST['release_delivery'])) {
+                $order = demo_driver_find_and_remove($state['active'], $demo_order_number);
+                if ($order) {
+                    $order['order_status'] = 'confirmed';
+                    array_unshift($state['available'], $order);
+                    demo_driver_save_state($state);
+
+                    $message = 'Delivery released back to available queue.';
+                    $message_type = 'success';
+                } else {
+                    $message = 'Unable to release this delivery.';
+                    $message_type = 'error';
+                }
+            }
+
+            if (isset($_POST['mark_shipped'])) {
+                foreach ($state['active'] as &$row) {
+                    if (($row['order_number'] ?? '') === $demo_order_number) {
+                        $row['order_status'] = 'shipped';
+                        break;
+                    }
+                }
+                unset($row);
+                demo_driver_save_state($state);
+                $message = 'Order marked as out for delivery.';
+                $message_type = 'success';
+            }
+
+            if (isset($_POST['mark_delivered'])) {
+                $delivery_notes = trim((string)($_POST['delivery_notes'] ?? ''));
+
+                if (!isset($_FILES['delivery_proof']) || ($_FILES['delivery_proof']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                    throw new RuntimeException('Delivery proof image is required.');
+                }
+
+                $file = $_FILES['delivery_proof'];
+                $max_size = 5 * 1024 * 1024;
+                if (($file['size'] ?? 0) > $max_size) {
+                    throw new RuntimeException('Delivery proof must be 5MB or smaller.');
+                }
+
+                $tmp_name = $file['tmp_name'] ?? '';
+                if ($tmp_name === '' || !is_uploaded_file($tmp_name)) {
+                    throw new RuntimeException('Invalid delivery proof upload.');
+                }
+
+                $mime = function_exists('mime_content_type') ? mime_content_type($tmp_name) : '';
+                if (($mime === '' || $mime === false) && function_exists('getimagesize')) {
+                    $img_info = @getimagesize($tmp_name);
+                    if (is_array($img_info) && !empty($img_info['mime'])) {
+                        $mime = $img_info['mime'];
+                    }
+                }
+                $allowed = [
+                    'image/jpeg' => 'jpg',
+                    'image/png' => 'png',
+                    'image/webp' => 'webp'
+                ];
+
+                if (!isset($allowed[$mime])) {
+                    $extension = strtolower(pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+                    $mime_from_ext = array_search($extension, $allowed, true);
+                    if ($mime_from_ext !== false) {
+                        $mime = $mime_from_ext;
+                    } else {
+                        throw new RuntimeException('Only JPG, PNG, or WEBP images are allowed.');
+                    }
+                }
+
+                $upload_dir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'delivery_proofs';
+                if (!is_dir($upload_dir) && !mkdir($upload_dir, 0775, true)) {
+                    throw new RuntimeException('Could not create delivery proof directory.');
+                }
+
+                $filename = 'delivery_' . $demo_order_number . '_' . $driver_id . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
+                $destination = $upload_dir . DIRECTORY_SEPARATOR . $filename;
+                if (!move_uploaded_file($tmp_name, $destination)) {
+                    throw new RuntimeException('Failed to upload delivery proof image.');
+                }
+
+                $proof_path = 'assets/uploads/delivery_proofs/' . $filename;
+
+                $order = demo_driver_find_and_remove($state['active'], $demo_order_number);
+                if ($order) {
+                    $order['order_status'] = 'delivered';
+                    $order['actual_delivery_date'] = date('Y-m-d H:i:s');
+                    $order['delivered_proof_image'] = $proof_path;
+                    $order['delivered_notes'] = $delivery_notes;
+                    array_unshift($state['delivered'], $order);
+                    demo_driver_save_state($state);
+
+                    $message = 'Order marked as delivered with proof image.';
+                    $message_type = 'success';
+                } else {
+                    @unlink($destination);
+                    $message = 'Unable to mark this order as delivered.';
+                    $message_type = 'error';
+                }
+            }
+
+            // Demo action handled; skip DB logic
+            if ($message_type !== '') {
+                // fall through to page render
+            }
+        } else {
         if (isset($_POST['claim_delivery'])) {
             $order_id = (int)($_POST['order_id'] ?? 0);
 
@@ -158,6 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = 'error';
             }
         }
+        }
     } catch (Throwable $e) {
         $message = $e->getMessage();
         $message_type = 'error';
@@ -172,6 +376,7 @@ $stats = [
 $available_orders = [];
 $my_active_orders = [];
 $recent_delivered = [];
+$using_demo_available_orders = false;
 
 try {
     $stats_stmt = $pdo->prepare("\n        SELECT\n            SUM(CASE WHEN delivery_driver_id IS NULL AND order_status = 'confirmed' THEN 1 ELSE 0 END) AS available_count,\n            SUM(CASE WHEN delivery_driver_id = ? AND order_status IN ('processing', 'shipped', 'confirmed') THEN 1 ELSE 0 END) AS active_count,\n            SUM(CASE WHEN delivery_driver_id = ? AND order_status = 'delivered' THEN 1 ELSE 0 END) AS delivered_count\n        FROM orders\n    ");
@@ -210,10 +415,60 @@ try {
     $done_stmt = $pdo->prepare("\n        SELECT id, order_number, actual_delivery_date, delivered_proof_image\n        FROM orders\n        WHERE delivery_driver_id = ?\n          AND order_status = 'delivered'\n        ORDER BY actual_delivery_date DESC\n        LIMIT 12\n    ");
     $done_stmt->execute([$driver_id]);
     $recent_delivered = $done_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Show demo deliveries only when the system has zero orders yet (fresh database)
+    if ($search === '') {
+        $orders_total = (int)$pdo->query("SELECT COUNT(*) FROM orders")->fetchColumn();
+        if ($orders_total === 0) {
+            $state = demo_driver_load_state();
+            $available_orders = $state['available'];
+            $my_active_orders = $state['active'];
+            $recent_delivered = array_slice($state['delivered'], 0, 12);
+            $stats['available'] = count($available_orders);
+            $stats['active'] = count($my_active_orders);
+            $stats['delivered'] = count($recent_delivered);
+            $using_demo_available_orders = true;
+        }
+    }
 } catch (PDOException $e) {
-    $message = 'Driver module database fields are missing. Please run the driver migration SQL first.';
-    $message_type = 'error';
     error_log('Driver dashboard error: ' . $e->getMessage());
+
+    // Graceful fallback: show demo deliveries even if driver schema isn't migrated yet
+    $state = demo_driver_load_state();
+    $available_orders = $state['available'];
+    $my_active_orders = $state['active'];
+    $recent_delivered = array_slice($state['delivered'], 0, 12);
+    if ($search !== '') {
+        $q = strtolower($search);
+        $available_orders = array_values(array_filter($available_orders, function ($order) use ($q) {
+            $hay = strtolower(
+                (string)($order['order_number'] ?? '') . ' ' .
+                (string)($order['shipping_name'] ?? '') . ' ' .
+                (string)($order['shipping_phone'] ?? '') . ' ' .
+                (string)($order['shipping_address'] ?? '') . ' ' .
+                (string)($order['first_name'] ?? '') . ' ' .
+                (string)($order['last_name'] ?? '')
+            );
+            return $q === '' || strpos($hay, $q) !== false;
+        }));
+
+        $my_active_orders = array_values(array_filter($my_active_orders, function ($order) use ($q) {
+            $hay = strtolower(
+                (string)($order['order_number'] ?? '') . ' ' .
+                (string)($order['shipping_name'] ?? '') . ' ' .
+                (string)($order['shipping_phone'] ?? '') . ' ' .
+                (string)($order['shipping_address'] ?? '') . ' ' .
+                (string)($order['first_name'] ?? '') . ' ' .
+                (string)($order['last_name'] ?? '')
+            );
+            return $q === '' || strpos($hay, $q) !== false;
+        }));
+    }
+
+    $stats['available'] = count($available_orders);
+    $stats['active'] = count($my_active_orders);
+    $stats['delivered'] = count($recent_delivered);
+    $using_demo_available_orders = true;
 }
 ?>
 <!DOCTYPE html>
@@ -226,6 +481,7 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background: linear-gradient(140deg, #f6f9f8 0%, #edf5ef 55%, #f7f9fb 100%); }
         .dashboard-card { transition: all 0.28s ease; background: #fff; border: 1px solid rgba(16, 133, 77, 0.12); }
@@ -262,11 +518,37 @@ try {
                 </div>
 
                 <div class="flex items-center gap-3">
-                    <span class="text-gray-600 text-sm hidden md:inline">Signed in as <span class="font-semibold"><?php echo htmlspecialchars($driver_name); ?></span></span>
-                    <a href="../auth/logout.php" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
-                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
-                    </a>
-                </div>
+	                    <div class="relative" x-data="{ open: false }">
+	                        <button @click="open = !open" class="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-full transition-all">
+	                            <div class="w-9 h-9 bg-[#10854d] rounded-full flex items-center justify-center shadow-md overflow-hidden">
+	                                <?php if ($profile_photo_url !== ''): ?>
+	                                    <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-9 h-9 object-cover">
+	                                <?php else: ?>
+	                                    <span class="text-white font-bold text-sm"><?php echo htmlspecialchars($driver_initial); ?></span>
+	                                <?php endif; ?>
+	                            </div>
+	                            <span class="hidden md:inline text-gray-700 font-medium"><?php echo htmlspecialchars($driver_first); ?></span>
+	                            <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+	                        </button>
+
+                         <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100" style="display: none;">
+                             <div class="px-4 py-3 border-b border-gray-100">
+                                 <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($driver_name); ?></p>
+                                 <p class="text-xs text-gray-500">Driver</p>
+                             </div>
+                             <a href="dashboard.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-[#10854d]">
+                                 <i class="fas fa-truck mr-2"></i> Dashboard
+                             </a>
+                             <a href="profile.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-[#10854d]">
+                                 <i class="fas fa-user mr-2"></i> My Profile
+                             </a>
+                             <div class="border-t border-gray-100 my-1"></div>
+                             <a href="../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
+                                 <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                             </a>
+                         </div>
+                     </div>
+                 </div>
             </div>
         </div>
     </nav>
@@ -317,12 +599,15 @@ try {
                     <h2 class="font-bold text-gray-800"><i class="fas fa-list-check mr-2 text-[#10854d]"></i>Available Orders</h2>
                     <span class="text-xs text-gray-500"><?php echo count($available_orders); ?> shown</span>
                 </div>
-                <div class="p-5 space-y-4 max-h-[650px] overflow-y-auto">
-                    <?php if (empty($available_orders)): ?>
-                        <p class="text-gray-500 text-sm">No available deliveries right now.</p>
-                    <?php else: ?>
-                        <?php foreach ($available_orders as $order): ?>
-                            <?php $customer_name = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? '')); ?>
+                 <div class="p-5 space-y-4 max-h-[650px] overflow-y-auto">
+                     <?php if (empty($available_orders)): ?>
+                         <p class="text-gray-500 text-sm">No available deliveries right now.</p>
+                     <?php else: ?>
+                         <?php foreach ($available_orders as $order): ?>
+                             <?php
+                                 $customer_name = trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? ''));
+                                 $is_demo = !empty($order['is_demo']);
+                             ?>
                             <div class="border border-gray-200 rounded-lg p-4">
                                 <div class="flex justify-between gap-3 mb-2">
                                     <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($order['order_number'] ?: ('ORD-' . str_pad((string)$order['id'], 6, '0', STR_PAD_LEFT))); ?></p>
@@ -330,17 +615,19 @@ try {
                                 </div>
                                 <p class="text-sm text-gray-600">Customer: <?php echo htmlspecialchars($customer_name ?: ($order['shipping_name'] ?? 'N/A')); ?></p>
                                 <p class="text-sm text-gray-600">Phone: <?php echo htmlspecialchars($order['shipping_phone'] ?? 'N/A'); ?></p>
-                                <p class="text-sm text-gray-600">Address: <?php echo htmlspecialchars($order['shipping_address'] ?? 'N/A'); ?></p>
-                                <div class="mt-3 flex items-center justify-between">
-                                    <span class="text-xs text-gray-500">Placed: <?php echo date('M d, Y h:i A', strtotime($order['created_at'])); ?></span>
-                                    <form method="POST">
-                                        <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
-                                        <button type="submit" name="claim_delivery" class="px-4 py-2 bg-[#10854d] text-white text-sm rounded-lg hover:bg-[#0d6e40]">Claim Delivery</button>
-                                    </form>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                                 <p class="text-sm text-gray-600">Address: <?php echo htmlspecialchars($order['shipping_address'] ?? 'N/A'); ?></p>
+                                 <div class="mt-3 flex items-center justify-between">
+                                      <span class="text-xs text-gray-500">Placed: <?php echo date('M d, Y h:i A', strtotime($order['created_at'])); ?></span>
+                                      <form method="POST">
+                                          <input type="hidden" name="order_id" value="<?php echo (int)($order['id'] ?? 0); ?>">
+                                          <input type="hidden" name="order_number" value="<?php echo htmlspecialchars((string)($order['order_number'] ?? '')); ?>">
+                                          <input type="hidden" name="is_demo" value="<?php echo $is_demo ? 1 : 0; ?>">
+                                          <button type="submit" name="claim_delivery" class="px-4 py-2 bg-[#10854d] text-white text-sm rounded-lg hover:bg-[#0d6e40]">Claim Delivery</button>
+                                      </form>
+                                 </div>
+                             </div>
+                         <?php endforeach; ?>
+                     <?php endif; ?>
                 </div>
             </section>
 
@@ -392,19 +679,25 @@ try {
 
                                 <div class="mt-4 flex flex-wrap gap-2">
                                     <form method="POST">
-                                        <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
+                                        <input type="hidden" name="order_id" value="<?php echo (int)($order['id'] ?? 0); ?>">
+                                        <input type="hidden" name="order_number" value="<?php echo htmlspecialchars((string)($order['order_number'] ?? '')); ?>">
+                                        <input type="hidden" name="is_demo" value="<?php echo !empty($order['is_demo']) ? 1 : 0; ?>">
                                         <button type="submit" name="mark_shipped" class="px-3 py-2 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700">Out for Delivery</button>
                                     </form>
                                     <?php if (($order['order_status'] ?? '') !== 'shipped'): ?>
                                         <form method="POST" onsubmit="return confirm('Release this delivery back to queue?');">
-                                            <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
+                                            <input type="hidden" name="order_id" value="<?php echo (int)($order['id'] ?? 0); ?>">
+                                            <input type="hidden" name="order_number" value="<?php echo htmlspecialchars((string)($order['order_number'] ?? '')); ?>">
+                                            <input type="hidden" name="is_demo" value="<?php echo !empty($order['is_demo']) ? 1 : 0; ?>">
                                             <button type="submit" name="release_delivery" class="px-3 py-2 bg-amber-500 text-white text-xs rounded-lg hover:bg-amber-600">Release</button>
                                         </form>
                                     <?php endif; ?>
                                 </div>
 
                                 <form method="POST" enctype="multipart/form-data" class="mt-3 p-3 bg-gray-50 rounded-lg space-y-2">
-                                    <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
+                                    <input type="hidden" name="order_id" value="<?php echo (int)($order['id'] ?? 0); ?>">
+                                    <input type="hidden" name="order_number" value="<?php echo htmlspecialchars((string)($order['order_number'] ?? '')); ?>">
+                                    <input type="hidden" name="is_demo" value="<?php echo !empty($order['is_demo']) ? 1 : 0; ?>">
                                     <label class="block text-xs font-semibold text-gray-600">Delivery Proof (required)</label>
                                     <input type="file" name="delivery_proof" accept="image/jpeg,image/png,image/webp" required class="block w-full text-xs text-gray-700">
                                     <textarea name="delivery_notes" rows="2" placeholder="Optional notes (receiver name, landmarks, etc.)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>

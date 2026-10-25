@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
+require_once '../shared/profile_photo.php';
 
 // Check if user is logged in as customer
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
@@ -10,6 +12,23 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
 
 $user_id = $_SESSION['user_id'];
 $message = '';
+$using_demo_products = false;
+
+$profile_image_value = (string)($_SESSION['profile_image'] ?? '');
+if (($profile_image_value === '' || $profile_image_value === 'default-avatar.png') && isset($pdo, $_SESSION['user_id'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT profile_image FROM users WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $profile_image_value = (string)($row['profile_image'] ?? '');
+        if ($profile_image_value !== '' && $profile_image_value !== 'default-avatar.png') {
+            $_SESSION['profile_image'] = $profile_image_value;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+$profile_photo_url = harvee_profile_photo_url($profile_image_value, '../');
 
 // DEBUG: Check database state
 try {
@@ -148,6 +167,7 @@ try {
     $min_price = $_GET['min_price'] ?? '';
     $max_price = $_GET['max_price'] ?? '';
     $sort = $_GET['sort'] ?? 'newest';
+    $store = $_GET['store'] ?? '';
     $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
     $limit = 12;
     $offset = ($page - 1) * $limit;
@@ -158,9 +178,9 @@ try {
                    c.name AS category_name
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
-            WHERE p.stock_quantity > 0";
+            WHERE p.stock_quantity > 0 AND (c.name NOT LIKE '%Egg%' AND c.name NOT LIKE '%Dairy%' OR c.name IS NULL)";
             
-    $count_sql = "SELECT COUNT(*) FROM products p WHERE p.stock_quantity > 0";
+    $count_sql = "SELECT COUNT(*) FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.stock_quantity > 0 AND (c.name NOT LIKE '%Egg%' AND c.name NOT LIKE '%Dairy%' OR c.name IS NULL)";
 
     $params = [];
     $count_params = [];
@@ -262,6 +282,28 @@ try {
     $total_pages = 1;
 }
 
+if (empty($products)) {
+    $products = harvee_demo_products();
+    
+    // Filter demo products by store if store parameter is provided
+    if (!empty($store)) {
+        $products = array_filter($products, function($product) use ($store) {
+            return ($product['store_id'] ?? '') === $store;
+        });
+    }
+    
+	    // Assign unique negative IDs to demo products for viewing details
+	    foreach ($products as &$product) {
+	        static $demo_id = -1;
+	        $product['id'] = $demo_id--;
+	    }
+	    unset($product);
+	    $total_products = count($products);
+	    $total_pages = 1;
+	    $page = 1;
+	    $using_demo_products = true;
+	}
+
 // Get categories for filter dropdown
 $categories = [];
 $selected_category_name = '';
@@ -269,7 +311,7 @@ try {
     $catStmt = $pdo->prepare("
         SELECT c.id, c.name
         FROM categories c
-        WHERE c.is_active = 1
+        WHERE c.is_active = 1 AND c.name NOT LIKE '%Egg%' AND c.name NOT LIKE '%Dairy%'
         ORDER BY c.name
     ");
     $catStmt->execute();
@@ -450,17 +492,21 @@ try {
                     </a>
                     
                     <!-- User Menu -->
-                    <div class="relative group">
-                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
-                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center">
-                                <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($_SESSION['first_name'], 0, 1)); ?>
-                                </span>
-                            </div>
-                            <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($_SESSION['first_name']); ?>
-                            </span>
-                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                    <div class="relative group">
+	                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
+	                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center overflow-hidden">
+	                                <?php if ($profile_photo_url !== ''): ?>
+	                                    <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-8 h-8 object-cover">
+	                                <?php else: ?>
+	                                    <span class="text-white font-bold text-sm">
+	                                        <?php echo strtoupper(substr($_SESSION['first_name'], 0, 1)); ?>
+	                                    </span>
+	                                <?php endif; ?>
+	                            </div>
+	                            <span class="hidden md:inline text-gray-700 font-medium">
+	                                <?php echo htmlspecialchars($_SESSION['first_name']); ?>
+	                            </span>
+	                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
@@ -682,7 +728,14 @@ try {
                 <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
-                            <h1 class="text-2xl font-bold text-gray-800">Fresh Products from Harvee Farm</h1>
+                            <?php 
+                            $page_title = 'Fresh Products from Harvee Farm';
+                            if (!empty($store) && !empty($products)) {
+                                // Get store name from the first product
+                                $page_title = htmlspecialchars($products[0]['store_name'] ?? 'Store Products');
+                            }
+                            ?>
+                            <h1 class="text-2xl font-bold text-gray-800"><?php echo $page_title; ?></h1>
                             <p class="text-gray-600">
                                 <?php if ($total_products > 0 && !empty($products)): ?>
                                     Showing <?php echo count($products); ?> of <?php echo $total_products; ?> products
@@ -744,11 +797,17 @@ try {
                                 <!-- Product Image & Badges -->
                                 <div class="relative h-48 bg-gradient-to-br from-green-50 to-gray-100">
                                     <!-- Product Image Placeholder -->
-                                    <div class="w-full h-full flex items-center justify-center">
-                                        <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                        </svg>
-                                    </div>
+                                    <?php if (!empty($product['image_url'])): ?>
+                                        <img src="<?php echo htmlspecialchars($product['image_url']); ?>"
+                                             alt="<?php echo htmlspecialchars($product['name'] ?? 'Product image'); ?>"
+                                             class="w-full h-full object-cover">
+                                    <?php else: ?>
+                                        <div class="w-full h-full flex items-center justify-center">
+                                            <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                            </svg>
+                                        </div>
+                                    <?php endif; ?>
                                     
                                     <!-- Badges -->
                                     <?php if ($is_new): ?>
@@ -756,7 +815,7 @@ try {
                                             NEW
                                         </span>
                                     <?php endif; ?>
-                                    
+
                                     <?php if ($is_low_stock && ($product['stock_quantity'] ?? 0) > 0): ?>
                                         <span class="stock-badge px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
                                             Only <?php echo $product['stock_quantity']; ?> left
@@ -792,7 +851,7 @@ try {
                                             </svg>
                                         </div>
                                         <div>
-                                            <p class="text-sm font-medium text-gray-700">Harvee Farm Store</p>
+                                            <p class="text-sm font-medium text-gray-700"><?php echo htmlspecialchars($product['store_name'] ?? 'Fresh Fields Market'); ?></p>
                                             <p class="text-xs text-gray-500">Direct from farm</p>
                                         </div>
                                     </div>
@@ -808,36 +867,56 @@ try {
                                     </div>
 
                                     <div class="mt-3 flex items-center gap-2">
-                                        <!-- Add to Cart Form -->
-                                        <form method="POST" action="cart.php" class="flex items-center space-x-2 flex-1">
-                                            <input type="hidden" name="product_id" value="<?php echo $product['id'] ?? 0; ?>">
-                                            <input type="hidden" name="add_to_cart" value="1">
-                                            <div class="relative">
-                                                <input type="number" 
-                                                       name="quantity" 
-                                                       value="1" 
-                                                       min="1" 
-                                                       max="<?php echo isset($product['stock_quantity']) ? min($product['stock_quantity'], 10) : 1; ?>"
-                                                       class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm">
+                                        <?php if (!empty($product['is_demo'])): ?>
+                                            <div class="flex items-center space-x-2 flex-1">
+                                                <div class="relative">
+                                                    <input type="number"
+                                                           value="1"
+                                                           min="1"
+                                                           max="<?php echo isset($product['stock_quantity']) ? min($product['stock_quantity'], 10) : 1; ?>"
+                                                           class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm bg-white"
+                                                           disabled>
+                                                </div>
+                                                <button type="button"
+                                                        class="px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg opacity-80 cursor-default flex items-center">
+                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                                    </svg>
+                                                    Add
+                                                </button>
                                             </div>
-                                            <button type="submit" 
-                                                    class="px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-colors flex items-center">
-                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                                                </svg>
-                                                Add
-                                            </button>
-                                        </form>
+                                        <?php else: ?>
+                                            <!-- Add to Cart Form -->
+                                            <form method="POST" action="cart.php" class="flex items-center space-x-2 flex-1">
+                                                <input type="hidden" name="product_id" value="<?php echo $product['id'] ?? 0; ?>">
+                                                <input type="hidden" name="add_to_cart" value="1">
+                                                <div class="relative">
+                                                    <input type="number" 
+                                                           name="quantity" 
+                                                           value="1" 
+                                                           min="1" 
+                                                           max="<?php echo isset($product['stock_quantity']) ? min($product['stock_quantity'], 10) : 1; ?>"
+                                                           class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm">
+                                                </div>
+                                                <button type="submit" 
+                                                        class="px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-colors flex items-center">
+                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                                    </svg>
+                                                    Add
+                                                </button>
+                                            </form>
 
-                                        <!-- Add to Wishlist -->
-                                        <form method="POST" action="" class="shrink-0">
-                                            <input type="hidden" name="product_id" value="<?php echo (int)($product['id'] ?? 0); ?>">
-                                            <button type="submit"
-                                                    name="add_to_wishlist"
-                                                    class="px-3 py-2 rounded-lg border text-sm font-medium transition-colors <?php echo in_array((int)($product['id'] ?? 0), $wishlist_product_ids, true) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'; ?>">
-                                                <i class="fas fa-heart"></i>
-                                            </button>
-                                        </form>
+                                            <!-- Add to Wishlist -->
+                                            <form method="POST" action="" class="shrink-0">
+                                                <input type="hidden" name="product_id" value="<?php echo (int)($product['id'] ?? 0); ?>">
+                                                <button type="submit"
+                                                        name="add_to_wishlist"
+                                                        class="px-3 py-2 rounded-lg border text-sm font-medium transition-colors <?php echo in_array((int)($product['id'] ?? 0), $wishlist_product_ids, true) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'; ?>">
+                                                    <i class="fas fa-heart"></i>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                     
                                     <!-- Quick Actions -->

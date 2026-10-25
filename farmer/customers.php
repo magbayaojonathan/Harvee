@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
     header('Location: ../auth/login.php');
@@ -9,6 +10,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
 
 $user_id = (int)$_SESSION['user_id'];
 $first_name = $_SESSION['first_name'] ?? ($_SESSION['name'] ?? 'Farmer');
+$last_name = $_SESSION['last_name'] ?? '';
+$full_name = trim($first_name . ' ' . $last_name);
 $search = trim($_GET['search'] ?? '');
 
 $stats = [
@@ -19,6 +22,7 @@ $stats = [
 ];
 
 $customers = [];
+$using_demo_customers = false;
 
 try {
     $stats_stmt = $pdo->prepare("
@@ -88,6 +92,31 @@ try {
 } catch (PDOException $e) {
     error_log('Farmer customers page error: ' . $e->getMessage());
 }
+
+// Demo fallback (only when there are zero customers and no search filter)
+if (empty($customers) && $search === '' && (int)($stats['total_customers'] ?? 0) === 0) {
+    $customers = harvee_demo_farmer_customers();
+    $using_demo_customers = true;
+
+    $total_customers = count($customers);
+    $repeat_customers = 0;
+    $total_orders = 0;
+    $total_sales = 0.0;
+
+    foreach ($customers as $c) {
+        $order_count = (int)($c['order_count'] ?? 0);
+        $total_orders += $order_count;
+        if ($order_count > 1) {
+            $repeat_customers++;
+        }
+        $total_sales += (float)($c['total_spent'] ?? 0);
+    }
+
+    $stats['total_customers'] = $total_customers;
+    $stats['repeat_customers'] = $repeat_customers;
+    $stats['total_orders'] = $total_orders;
+    $stats['total_sales'] = $total_sales;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -135,32 +164,7 @@ try {
     </style>
 </head>
 <body class="min-h-screen">
-    <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-xl">H</span>
-                    </div>
-                    <span class="text-xl font-bold gradient-text">Harvee Farm</span>
-                </a>
-
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="dashboard.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-home mr-1"></i> Dashboard</a>
-                    <a href="products/products.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-box mr-1"></i> Products</a>
-                    <a href="orders.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-shopping-bag mr-1"></i> Orders</a>
-                    <a href="customers.php" class="nav-link active text-gray-700 font-medium"><i class="fas fa-users mr-1"></i> Customers</a>
-                </div>
-
-                <div class="flex items-center space-x-3">
-                    <span class="hidden md:inline text-sm text-gray-600">Hi, <?php echo htmlspecialchars($first_name); ?></span>
-                    <a href="../auth/logout.php" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
-                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
-                    </a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <?php require_once __DIR__ . '/partials/navbar.php'; ?>
 
     <main class="container mx-auto px-4 py-8">
         <div class="hero rounded-2xl p-8 mb-8 text-white">
@@ -237,6 +241,7 @@ try {
                                 if ($name === '') {
                                     $name = trim((string)($customer['name'] ?? 'Customer'));
                                 }
+                                $is_demo = !empty($customer['is_demo']);
                                 ?>
                                 <tr class="hover:bg-gray-50">
                                     <td class="px-6 py-4">
@@ -244,7 +249,12 @@ try {
                                             <div class="w-10 h-10 bg-green-100 text-[#10854d] rounded-full flex items-center justify-center font-bold">
                                                 <?php echo strtoupper(substr($name, 0, 1)); ?>
                                             </div>
-                                            <span class="font-semibold text-gray-800"><?php echo htmlspecialchars($name); ?></span>
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-semibold text-gray-800"><?php echo htmlspecialchars($name); ?></span>
+                                                <?php if ($is_demo): ?>
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600"></span>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 text-sm text-gray-700">

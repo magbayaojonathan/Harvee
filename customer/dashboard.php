@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once '../shared/demo_data.php';
 // Check if user is logged in as customer
 if(!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
     header('Location: ../auth/login.php');
@@ -15,6 +16,7 @@ $full_name = trim($first_name . ' ' . $last_name);
 
 // Get cart count
 require_once '../config/database.php';
+require_once '../shared/profile_photo.php';
 $user_id = $_SESSION['user_id'];
 $cart_count = 0;
 $order_count = 0;
@@ -22,6 +24,23 @@ $recent_orders = [];
 $total_spent = 0;
 $pending_orders = 0;
 $wishlist_count = 0;
+$using_demo_orders = false;
+
+$profile_image_value = (string)($_SESSION['profile_image'] ?? '');
+if (($profile_image_value === '' || $profile_image_value === 'default-avatar.png') && isset($pdo, $_SESSION['user_id'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT profile_image FROM users WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $profile_image_value = (string)($row['profile_image'] ?? '');
+        if ($profile_image_value !== '' && $profile_image_value !== 'default-avatar.png') {
+            $_SESSION['profile_image'] = $profile_image_value;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+$profile_photo_url = harvee_profile_photo_url($profile_image_value, '../');
 
 try {
     // Get cart count
@@ -50,7 +69,8 @@ try {
     $recentStmt = $pdo->prepare("
         SELECT o.*, 
                COUNT(oi.id) as item_count,
-               u.first_name as seller_name
+               u.first_name as seller_name,
+               GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR ', ') as item_names
         FROM orders o 
         LEFT JOIN order_items oi ON o.id = oi.order_id 
         LEFT JOIN users u ON o.customer_id = u.id
@@ -81,6 +101,17 @@ try {
 } catch (PDOException $e) {
     // Tables might not exist yet
     $recommended_products = [];
+}
+
+if (empty($recent_orders)) {
+    $demo_orders = harvee_demo_orders();
+    $recent_orders = $demo_orders;
+    $order_count = count($demo_orders);
+    $pending_orders = count(array_filter($demo_orders, fn($order) => ($order['order_status'] ?? '') === 'pending'));
+    $total_spent = array_reduce($demo_orders, function ($carry, $order) {
+        return $carry + ((($order['order_status'] ?? '') !== 'cancelled') ? (float)($order['total'] ?? 0) : 0);
+    }, 0);
+    $using_demo_orders = true;
 }
 ?>
 
@@ -211,17 +242,21 @@ try {
                 <div class="flex items-center space-x-3">
                     <!-- Profile Dropdown - Only Logout -->
                     <div class="relative" x-data="{ open: false }">
-                        <button @click="open = !open" class="flex items-center space-x-2 p-1.5 hover:bg-gray-100 rounded-full transition-all">
-                            <div class="w-9 h-9 bg-gradient-to-br from-[#10854d] to-[#4ade80] rounded-full flex items-center justify-center shadow-md">
-                                <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($first_name, 0, 1)); ?>
-                                </span>
-                            </div>
-                            <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($first_name); ?>
-                            </span>
-                            <i class="fas fa-chevron-down text-xs text-gray-500"></i>
-                        </button>
+	                        <button @click="open = !open" class="flex items-center space-x-2 p-1.5 hover:bg-gray-100 rounded-full transition-all">
+	                            <div class="w-9 h-9 bg-gradient-to-br from-[#10854d] to-[#4ade80] rounded-full flex items-center justify-center shadow-md overflow-hidden">
+	                                <?php if ($profile_photo_url !== ''): ?>
+	                                    <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-9 h-9 object-cover">
+	                                <?php else: ?>
+	                                    <span class="text-white font-bold text-sm">
+	                                        <?php echo strtoupper(substr($first_name, 0, 1)); ?>
+	                                    </span>
+	                                <?php endif; ?>
+	                            </div>
+	                            <span class="hidden md:inline text-gray-700 font-medium">
+	                                <?php echo htmlspecialchars($first_name); ?>
+	                            </span>
+	                            <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+	                        </button>
                         
                         <!-- Dropdown Menu - Profile & Logout -->
                         <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100">
@@ -349,13 +384,34 @@ try {
                     <?php else: ?>
                         <div class="space-y-3">
                             <?php foreach ($recent_orders as $order): ?>
+                                <?php
+                                $order_item_preview = '';
+                                $order_item_image = '';
+                                if (!empty($order['preview_items'])) {
+                                    $order_item_preview = implode(', ', array_column(array_slice($order['preview_items'], 0, 2), 'product_name'));
+                                    $order_item_image = (string)($order['preview_items'][0]['image_url'] ?? '');
+                                } else {
+                                    $order_item_preview = (string)($order['item_names'] ?? '');
+                                }
+                                ?>
                                 <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                                     <div class="flex items-center space-x-4">
-                                        <div class="w-10 h-10 bg-[#10854d]/10 rounded-lg flex items-center justify-center">
-                                            <i class="fas fa-receipt text-[#10854d]"></i>
+                                        <div class="w-14 h-14 bg-white rounded-xl overflow-hidden flex items-center justify-center border border-gray-200 shadow-sm shrink-0">
+                                            <?php if ($order_item_image !== ''): ?>
+                                                <img src="<?php echo htmlspecialchars($order_item_image); ?>"
+                                                     alt="<?php echo htmlspecialchars($order_item_preview ?: 'Order item'); ?>"
+                                                     class="w-full h-full object-cover">
+                                            <?php else: ?>
+                                                <i class="fas fa-box text-xl text-[#10854d]"></i>
+                                            <?php endif; ?>
+                                            <?php if ($order_item_preview !== ''): ?>
+                                                <p class="text-sm text-gray-500 mt-1 truncate max-w-[18rem]">
+                                                    <?php echo htmlspecialchars($order_item_preview); ?>
+                                                </p>
+                                            <?php endif; ?>
                                         </div>
                                         <div>
-                                            <p class="font-semibold text-gray-800">Order #<?php echo str_pad($order['id'], 8, '0', STR_PAD_LEFT); ?></p>
+                                            <p class="font-semibold text-gray-800">Order #<?php echo !empty($order['order_number']) ? htmlspecialchars($order['order_number']) : str_pad($order['id'], 8, '0', STR_PAD_LEFT); ?></p>
                                             <div class="flex items-center space-x-2 text-sm text-gray-500">
                                                 <span><i class="far fa-calendar mr-1"></i><?php echo date('M d, Y', strtotime($order['created_at'])); ?></span>
                                                 <span>•</span>

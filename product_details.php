@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'shared/demo_data.php';
 
 // Get product ID
 $product_id = $_GET['id'] ?? 0;
@@ -13,22 +14,23 @@ if (!$product_id) {
     exit;
 }
 
-try {
-    // Fetch product details with farmer info
-    $stmt = $pdo->prepare("
-        SELECT 
-            p.*,
-            c.name AS category_name,
-            u.first_name,
-            u.last_name,
-            u.email
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN users u ON p.farmer_id = u.id
-        WHERE p.id = ?
-    ");
-    $stmt->execute([$product_id]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+// Check if it's a demo product (negative ID)
+if ($product_id < 0) {
+    $demo_products = harvee_demo_products();
+    $product = null;
+    
+    // Find the demo product by matching the negative ID (-1, -2, -3, etc.)
+    foreach ($demo_products as $index => $demo_product) {
+        if ($index === abs($product_id) - 1) {
+            $product = $demo_product;
+            $product['id'] = $product_id; // Keep the negative ID
+            $product['farmer_id'] = 0;
+            $product['first_name'] = $demo_product['farmer_first_name'] ?? 'Fresh';
+            $product['last_name'] = $demo_product['farmer_last_name'] ?? 'Fields';
+            $product['email'] = $demo_product['farmer_email'] ?? 'info@freshfields.com';
+            break;
+        }
+    }
     
     if (!$product) {
         http_response_code(404);
@@ -37,12 +39,45 @@ try {
         </div>';
         exit;
     }
-    
-    // Check stock status
-    $stock_quantity = (int)($product['stock_quantity'] ?? 0);
-    $is_low_stock = $stock_quantity > 0 && $stock_quantity < 10;
-    $is_out_of_stock = $stock_quantity <= 0;
-    
+} else {
+    // Try database query for real products
+    try {
+        $stmt = $pdo->prepare("
+            SELECT 
+                p.*,
+                c.name AS category_name,
+                u.first_name,
+                u.last_name,
+                u.email
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN users u ON p.farmer_id = u.id
+            WHERE p.id = ?
+        ");
+        $stmt->execute([$product_id]);
+        $product = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$product) {
+            http_response_code(404);
+            echo '<div class="text-center p-8">
+                <p class="text-gray-600">Product not found.</p>
+            </div>';
+            exit;
+        }
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo '<div class="text-center p-8">
+            <p class="text-red-600">Error loading product details. Please try again.</p>
+        </div>';
+        exit;
+    }
+}
+
+// Check stock status
+$stock_quantity = (int)($product['stock_quantity'] ?? 0);
+$is_low_stock = $stock_quantity > 0 && $stock_quantity < 10;
+$is_out_of_stock = $stock_quantity <= 0;
+
 ?>
     <div class="space-y-6">
         <!-- Product Header -->
@@ -50,10 +85,16 @@ try {
             <!-- Product Image & Info -->
             <div class="md:w-1/2">
                 <!-- Image -->
-                <div class="w-full h-80 bg-gradient-to-br from-green-50 to-gray-100 rounded-lg flex items-center justify-center mb-4">
-                    <svg class="w-24 h-24 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                    </svg>
+                <div class="w-full h-80 bg-gradient-to-br from-green-50 to-gray-100 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+                    <?php if (!empty($product['image_url'])): ?>
+                        <img src="<?php echo htmlspecialchars($product['image_url']); ?>" 
+                             alt="<?php echo htmlspecialchars($product['name'] ?? 'Product'); ?>"
+                             class="w-full h-full object-cover">
+                    <?php else: ?>
+                        <svg class="w-24 h-24 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Product Badges -->
@@ -154,8 +195,8 @@ try {
                     </div>
                     
                     <!-- Quick Action -->
-                    <a href="browse.php" class="px-4 py-2 bg-white text-[#10854d] font-medium rounded-lg hover:bg-gray-100 border border-[#10854d] transition-colors">
-                        More from this Seller
+                    <a href="browse.php?store=<?php echo htmlspecialchars($product['store_id'] ?? ''); ?>" class="px-4 py-2 bg-white text-[#10854d] font-medium rounded-lg hover:bg-gray-100 border border-[#10854d] transition-colors">
+                        More from this Store
                     </a>
                 </div>
             </div>
@@ -209,11 +250,3 @@ try {
             </div>
         </div>
     </div>
-<?php
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo '<div class="text-center p-8">
-        <p class="text-red-600">Error loading product details. Please try again.</p>
-    </div>';
-}
-?>

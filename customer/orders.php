@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
 
 // Check if user is logged in as customer
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
@@ -11,6 +12,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'customer') {
 $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
+$using_demo_orders = false;
 
 // Handle order cancellation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_order'])) {
@@ -126,6 +128,58 @@ foreach ($all_orders as $order) {
     if (($order['order_status'] ?? '') !== 'cancelled') {
         $stats['total_spent'] += $order['total'];
     }
+}
+
+if (empty($orders)) {
+    $demo_orders = harvee_demo_orders();
+    $orders = array_values(array_filter($demo_orders, function ($order) use ($filter) {
+        if ($filter === 'all') {
+            return true;
+        }
+        if ($filter === 'paid') {
+            return ($order['payment_status'] ?? '') === 'paid';
+        }
+        if ($filter === 'completed') {
+            return ($order['order_status'] ?? '') === 'delivered';
+        }
+
+        return ($order['order_status'] ?? '') === $filter;
+    }));
+
+    $all_orders = $demo_orders;
+    $stats = [
+        'total' => 0,
+        'pending' => 0,
+        'paid' => 0,
+        'shipped' => 0,
+        'completed' => 0,
+        'cancelled' => 0,
+        'total_spent' => 0
+    ];
+
+    foreach ($all_orders as $order) {
+        $stats['total']++;
+        if (($order['order_status'] ?? '') === 'pending') {
+            $stats['pending']++;
+        }
+        if (($order['payment_status'] ?? '') === 'paid') {
+            $stats['paid']++;
+        }
+        if (($order['order_status'] ?? '') === 'shipped') {
+            $stats['shipped']++;
+        }
+        if (($order['order_status'] ?? '') === 'delivered') {
+            $stats['completed']++;
+        }
+        if (($order['order_status'] ?? '') === 'cancelled') {
+            $stats['cancelled']++;
+        }
+        if (($order['order_status'] ?? '') !== 'cancelled') {
+            $stats['total_spent'] += $order['total'];
+        }
+    }
+
+    $using_demo_orders = true;
 }
 ?>
 
@@ -305,16 +359,21 @@ foreach ($all_orders as $order) {
         <?php else: ?>
             <div class="space-y-4">
                 <?php foreach ($orders as $order): 
-                    // Get order items for this order
-                    $stmt = $pdo->prepare("
-                        SELECT oi.*,
-                               u.name as farmer_name
-                        FROM order_items oi
-                        LEFT JOIN users u ON oi.farmer_id = u.id
-                        WHERE oi.order_id = ?
-                    ");
-                    $stmt->execute([$order['id']]);
-                    $order_items = $stmt->fetchAll();
+                    if (!empty($order['is_demo'])) {
+                        $order_items = $order['preview_items'] ?? [];
+                    } else {
+                        $stmt = $pdo->prepare("
+                            SELECT oi.*,
+                                   p.image_url,
+                                   u.name as farmer_name
+                            FROM order_items oi
+                            LEFT JOIN products p ON oi.product_id = p.id
+                            LEFT JOIN users u ON oi.farmer_id = u.id
+                            WHERE oi.order_id = ?
+                        ");
+                        $stmt->execute([$order['id']]);
+                        $order_items = $stmt->fetchAll();
+                    }
                 ?>
                     <div class="order-card bg-white rounded-xl shadow-sm overflow-hidden">
                         <!-- Order Header -->
@@ -322,7 +381,9 @@ foreach ($all_orders as $order) {
                             <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-2 sm:mb-0">
                                 <div>
                                     <span class="text-sm text-gray-500">Order #</span>
-                                    <span class="font-mono font-bold text-gray-800"><?php echo str_pad($order['id'], 8, '0', STR_PAD_LEFT); ?></span>
+                                    <span class="font-mono font-bold text-gray-800">
+                                        <?php echo !empty($order['is_demo']) ? htmlspecialchars($order['order_number']) : str_pad($order['id'], 8, '0', STR_PAD_LEFT); ?>
+                                    </span>
                                 </div>
                                 <div class="flex items-center">
                                     <span class="text-sm text-gray-500 mr-2">Status:</span>
@@ -362,10 +423,14 @@ foreach ($all_orders as $order) {
                                 <div class="text-sm text-gray-500">
                                     <?php echo date('F j, Y \a\t g:i A', strtotime($order['created_at'])); ?>
                                 </div>
-                                <a href="order_details.php?id=<?php echo $order['id']; ?>" 
-                                   class="text-[#10854d] hover:text-[#0d6e40] font-medium text-sm">
-                                    View Details →
-                                </a>
+                                <?php if (!empty($order['is_demo'])): ?>
+                                    <span class="text-[#10854d] font-medium text-sm">View Details →</span>
+                                <?php else: ?>
+                                    <a href="order_details.php?id=<?php echo $order['id']; ?>" 
+                                       class="text-[#10854d] hover:text-[#0d6e40] font-medium text-sm">
+                                        View Details →
+                                    </a>
+                                <?php endif; ?>
                             </div>
                         </div>
                         
@@ -374,7 +439,19 @@ foreach ($all_orders as $order) {
                             <?php foreach (array_slice($order_items, 0, 2) as $item): ?>
                                 <div class="px-6 py-4">
                                     <div class="flex justify-between items-center">
-                                        <div class="flex-1">
+                                        <div class="flex items-center gap-4 flex-1">
+                                            <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+                                                <?php if (!empty($item['image_url'])): ?>
+                                                    <img src="<?php echo htmlspecialchars($item['image_url']); ?>"
+                                                         alt="<?php echo htmlspecialchars($item['product_name']); ?>"
+                                                         class="w-full h-full object-cover">
+                                                <?php else: ?>
+                                                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                                    </svg>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="flex-1">
                                             <h3 class="font-semibold text-gray-800 mb-1">
                                                 <?php echo htmlspecialchars($item['product_name']); ?>
                                             </h3>
@@ -382,6 +459,7 @@ foreach ($all_orders as $order) {
                                                 Farmer: <?php echo htmlspecialchars($item['farmer_name']); ?> • 
                                                 Qty: <?php echo $item['quantity']; ?>
                                             </p>
+                                            </div>
                                         </div>
                                         <div class="text-right">
                                             <div class="font-bold text-[#10854d]">
@@ -418,7 +496,8 @@ foreach ($all_orders as $order) {
                                 
                                 <!-- Order Actions -->
                                 <div class="flex gap-2">
-                                    <?php if (($order['order_status'] ?? '') === 'pending'): ?>
+                                    <?php if (!empty($order['is_demo'])): ?>
+                                    <?php elseif (($order['order_status'] ?? '') === 'pending'): ?>
                                         <form method="POST" action="" class="inline" onsubmit="return confirm('Are you sure you want to cancel this order?');">
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                             <button type="submit" 
@@ -429,17 +508,19 @@ foreach ($all_orders as $order) {
                                         </form>
                                     <?php endif; ?>
                                     
-                                    <?php if (($order['order_status'] ?? '') === 'delivered'): ?>
+                                    <?php if (empty($order['is_demo']) && ($order['order_status'] ?? '') === 'delivered'): ?>
                                         <a href="rate_order.php?id=<?php echo $order['id']; ?>" 
                                            class="px-4 py-2 bg-yellow-100 text-yellow-600 rounded-full text-sm font-medium hover:bg-yellow-200 transition-colors">
                                             Rate Products
                                         </a>
                                     <?php endif; ?>
                                     
-                                    <a href="order_details.php?id=<?php echo $order['id']; ?>" 
-                                       class="px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-300 transition-colors">
-                                        Track Order
-                                    </a>
+                                    <?php if (empty($order['is_demo'])): ?>
+                                        <a href="order_details.php?id=<?php echo $order['id']; ?>" 
+                                           class="px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-300 transition-colors">
+                                            Track Order
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>

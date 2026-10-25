@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
 
 // Check if user is logged in as farmer
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
@@ -24,8 +25,11 @@ $stats = [
 ];
 
 $recent_orders = [];
+$recent_reviews = [];
 $low_stock_products = [];
 $recent_products = [];
+$using_demo_recent_orders = false;
+$using_demo_recent_reviews = false;
 
 try {
     // Get total products
@@ -79,9 +83,11 @@ try {
     $stmt = $pdo->prepare("
         SELECT o.id, o.order_number, o.total, o.order_status, o.created_at,
                u.first_name, u.last_name,
-               COUNT(oi.id) as item_count
+               COUNT(oi.id) as item_count,
+               COALESCE(MIN(p.image_url), '') AS preview_image
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN products p ON oi.product_id = p.id
         JOIN users u ON o.customer_id = u.id
         WHERE oi.farmer_id = ?
         GROUP BY o.id
@@ -90,6 +96,21 @@ try {
     ");
     $stmt->execute([$user_id]);
     $recent_orders = $stmt->fetchAll();
+
+    // Get recent reviews
+    $stmt = $pdo->prepare("
+        SELECT r.id, r.rating, r.title, r.comment, r.images, r.created_at,
+               p.name AS product_name, p.image_url AS product_image_url,
+               u.first_name, u.last_name
+        FROM reviews r
+        JOIN products p ON r.product_id = p.id
+        JOIN users u ON r.user_id = u.id
+        WHERE p.farmer_id = ? AND r.is_approved = 1
+        ORDER BY r.created_at DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$user_id]);
+    $recent_reviews = $stmt->fetchAll();
     
     // Get low stock products list
     $stmt = $pdo->prepare("
@@ -115,6 +136,40 @@ try {
     
 } catch (PDOException $e) {
     error_log("Dashboard error: " . $e->getMessage());
+}
+
+// Demo fallbacks (display-only placeholders)
+if (empty($recent_orders)) {
+    try {
+        $any_orders_stmt = $pdo->prepare("SELECT COUNT(*) FROM order_items WHERE farmer_id = ?");
+        $any_orders_stmt->execute([$user_id]);
+        $any_orders = (int)$any_orders_stmt->fetchColumn();
+        if ($any_orders === 0) {
+            $recent_orders = harvee_demo_farmer_orders_with_image_base('../assets/images');
+            $using_demo_recent_orders = true;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+
+if (empty($recent_reviews)) {
+    try {
+        $any_reviews_stmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM reviews r
+            JOIN products p ON r.product_id = p.id
+            WHERE p.farmer_id = ? AND r.is_approved = 1
+        ");
+        $any_reviews_stmt->execute([$user_id]);
+        $any_reviews = (int)$any_reviews_stmt->fetchColumn();
+        if ($any_reviews === 0) {
+            $recent_reviews = harvee_demo_farmer_reviews_with_image_base('../assets/images');
+            $using_demo_recent_reviews = true;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
 }
 ?>
 
@@ -201,81 +256,7 @@ try {
     </style>
 </head>
 <body class="min-h-screen">
-    <!-- Main Navigation -->
-    <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <!-- Logo -->
-                <a href="dashboard.php" class="flex items-center space-x-2">
-                    <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
-                    <span class="text-xl font-bold gradient-text">Harvee Farm</span>
-                </a>
-                
-                <!-- Main Navigation Links -->
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="dashboard.php" class="nav-link text-gray-700 font-medium <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
-                        <i class="fas fa-home mr-1"></i> Dashboard
-                    </a>
-                    <a href="products/products.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
-                        <i class="fas fa-box mr-1"></i> Products
-                    </a>
-                    <a href="orders.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
-                        <i class="fas fa-shopping-bag mr-1"></i> Orders
-                    </a>
-                    <a href="reviews.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
-                        <i class="fas fa-star mr-1"></i> Reviews
-                    </a>
-                    <a href="customers.php" class="nav-link text-gray-700 font-medium hover:text-[#10854d]">
-                        <i class="fas fa-users mr-1"></i> Customers
-                    </a>
-                </div>
-
-                <!-- Right Section - Profile Only -->
-                <div class="flex items-center space-x-3">
-                    <!-- Add Product Button -->
-                    <a href="products/add.php" class="hidden md:inline-flex items-center px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-all shadow-md hover:shadow-lg">
-                        <i class="fas fa-plus mr-2"></i> Add Product
-                    </a>
-                    
-                    <!-- Profile Dropdown -->
-                    <div class="relative" x-data="{ open: false }">
-                        <button @click="open = !open" class="flex items-center space-x-2 p-1.5 hover:bg-gray-100 rounded-full transition-all">
-                            <div class="w-9 h-9 bg-[#10854d] rounded-full flex items-center justify-center shadow-md">
-                                <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($first_name, 0, 1)); ?>
-                                </span>
-                            </div>
-                            <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($first_name); ?>
-                            </span>
-                            <i class="fas fa-chevron-down text-xs text-gray-500"></i>
-                        </button>
-                        
-                        <!-- Dropdown Menu -->
-                        <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100" style="display: none;">
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($full_name); ?></p>
-                                <p class="text-xs text-gray-500">Farmer</p>
-                            </div>
-                            <a href="profile.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-[#10854d]">
-                                <i class="fas fa-user mr-2"></i> My Profile
-                            </a>
-                            <a href="settings.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-[#10854d]">
-                                <i class="fas fa-cog mr-2"></i> Settings
-                            </a>
-                            <div class="border-t border-gray-100 my-1"></div>
-                            <a href="../auth/logout.php" class="block px-4 py-2 text-red-600 hover:bg-red-50">
-                                <i class="fas fa-sign-out-alt mr-2"></i> Logout
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Alpine.js for dropdown -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <?php require_once __DIR__ . '/partials/navbar.php'; ?>
 
     <main class="container mx-auto px-4 py-8">
         <!-- Welcome Banner -->
@@ -390,10 +371,15 @@ try {
                     <?php else: ?>
                         <div class="space-y-3">
                             <?php foreach ($recent_orders as $order): ?>
+                                <?php $thumb = trim($order['preview_image'] ?? ''); ?>
                                 <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                     <div class="flex items-center space-x-4">
-                                        <div class="w-10 h-10 bg-[#10854d]/10 rounded-lg flex items-center justify-center">
-                                            <i class="fas fa-receipt text-[#10854d]"></i>
+                                        <div class="w-10 h-10 bg-[#10854d]/10 rounded-lg flex items-center justify-center overflow-hidden">
+                                            <?php if ($thumb !== ''): ?>
+                                                <img src="<?php echo htmlspecialchars($thumb); ?>" alt="Order preview" class="w-10 h-10 object-cover">
+                                            <?php else: ?>
+                                                <i class="fas fa-receipt text-[#10854d]"></i>
+                                            <?php endif; ?>
                                         </div>
                                         <div>
                                             <p class="font-semibold text-gray-800"><?php echo $order['order_number']; ?></p>
@@ -409,6 +395,68 @@ try {
                                         <span class="status-badge status-<?php echo $order['order_status']; ?>">
                                             <?php echo ucfirst($order['order_status']); ?>
                                         </span>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Recent Reviews Card -->
+                <div class="dashboard-card bg-white rounded-xl p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-star text-[#10854d] mr-2"></i>
+                            Recent Reviews
+                        </h2>
+                        <a href="reviews.php" class="text-sm text-[#10854d] hover:underline flex items-center">
+                            View All <i class="fas fa-arrow-right ml-1 text-xs"></i>
+                        </a>
+                    </div>
+
+                    <?php if (empty($recent_reviews)): ?>
+                        <div class="text-center py-8">
+                            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i class="fas fa-star text-2xl text-gray-400"></i>
+                            </div>
+                            <p class="text-gray-500">No reviews yet</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="space-y-3">
+                            <?php foreach ($recent_reviews as $review): ?>
+                                <?php
+                                    $product_thumb = trim($review['product_image_url'] ?? '');
+                                    $reviewer_name = trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''));
+                                    $comment = (string)($review['comment'] ?? '');
+                                    if ($product_thumb !== '' && strpos($product_thumb, 'http') !== 0 && ($product_thumb[0] ?? '') !== '/' && substr($product_thumb, 0, 3) !== '../') {
+                                        $product_thumb = '../' . $product_thumb;
+                                    }
+                                ?>
+                                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <div class="flex items-center space-x-4">
+                                        <div class="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center overflow-hidden">
+                                            <?php if ($product_thumb !== ''): ?>
+                                                <img src="<?php echo htmlspecialchars($product_thumb); ?>" alt="<?php echo htmlspecialchars($review['product_name'] ?? 'Product'); ?>" class="w-10 h-10 object-cover">
+                                            <?php else: ?>
+                                                <i class="fas fa-seedling text-amber-600"></i>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($review['product_name'] ?? 'Product'); ?></p>
+                                            <p class="text-sm text-gray-500">
+                                                <?php echo htmlspecialchars($reviewer_name !== '' ? $reviewer_name : 'Customer'); ?> â€¢ <?php echo date('M d, Y', strtotime($review['created_at'] ?? 'now')); ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="flex items-center gap-1 text-amber-500 justify-end">
+                                            <?php for ($s = 1; $s <= 5; $s++): ?>
+                                                <i class="fa<?php echo $s <= (int)($review['rating'] ?? 0) ? 's' : 'r'; ?> fa-star"></i>
+                                            <?php endfor; ?>
+                                        </div>
+                                        <p class="text-xs text-gray-600 mt-1">
+                                            <?php echo htmlspecialchars(substr($comment, 0, 48)); ?><?php echo strlen($comment) > 48 ? '...' : ''; ?>
+                                        </p>
                                     </div>
                                 </div>
                             <?php endforeach; ?>

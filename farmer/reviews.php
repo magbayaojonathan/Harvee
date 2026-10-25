@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'farmer') {
     header('Location: ../auth/login.php');
@@ -9,6 +10,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'farmer') {
 
 $user_id = (int)$_SESSION['user_id'];
 $first_name = $_SESSION['first_name'] ?? 'Farmer';
+$last_name = $_SESSION['last_name'] ?? '';
+$full_name = trim($first_name . ' ' . $last_name);
 
 $rating_filter = (int)($_GET['rating'] ?? 0);
 if ($rating_filter < 1 || $rating_filter > 5) {
@@ -22,6 +25,7 @@ $stats = [
     'five_star' => 0,
     'with_images' => 0
 ];
+$using_demo_reviews = false;
 
 try {
     $stats_stmt = $pdo->prepare("\n        SELECT\n            COUNT(*) AS total_reviews,\n            ROUND(AVG(r.rating), 2) AS avg_rating,\n            SUM(CASE WHEN r.rating = 5 THEN 1 ELSE 0 END) AS five_star,\n            SUM(CASE WHEN r.images IS NOT NULL AND r.images <> '' AND r.images <> '[]' THEN 1 ELSE 0 END) AS with_images\n        FROM reviews r\n        JOIN products p ON r.product_id = p.id\n        WHERE p.farmer_id = ? AND r.is_approved = 1\n    ");
@@ -32,7 +36,7 @@ try {
     $stats['five_star'] = (int)($stats_row['five_star'] ?? 0);
     $stats['with_images'] = (int)($stats_row['with_images'] ?? 0);
 
-    $sql = "\n        SELECT r.id, r.rating, r.title, r.comment, r.images, r.created_at,\n               p.id AS product_id, p.name AS product_name,\n               u.first_name, u.last_name\n        FROM reviews r\n        JOIN products p ON r.product_id = p.id\n        JOIN users u ON r.user_id = u.id\n        WHERE p.farmer_id = ? AND r.is_approved = 1\n    ";
+    $sql = "\n        SELECT r.id, r.rating, r.title, r.comment, r.images, r.created_at,\n               p.id AS product_id, p.name AS product_name, p.image_url AS product_image_url,\n               u.first_name, u.last_name\n        FROM reviews r\n        JOIN products p ON r.product_id = p.id\n        JOIN users u ON r.user_id = u.id\n        WHERE p.farmer_id = ? AND r.is_approved = 1\n    ";
     $params = [$user_id];
 
     if ($rating_filter > 0) {
@@ -47,6 +51,35 @@ try {
     $reviews = $review_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log('farmer reviews error: ' . $e->getMessage());
+}
+
+// Demo fallback (only when there are zero approved reviews and no rating filter)
+if (empty($reviews) && $rating_filter === 0 && (int)($stats['total_reviews'] ?? 0) === 0) {
+    $reviews = harvee_demo_farmer_reviews_with_image_base('../assets/images');
+    $using_demo_reviews = true;
+
+    $total = 0;
+    $sum = 0;
+    $five = 0;
+    $with_images = 0;
+
+    foreach ($reviews as $r) {
+        $rating = (int)($r['rating'] ?? 0);
+        $total++;
+        $sum += $rating;
+        if ($rating === 5) {
+            $five++;
+        }
+        $imgs = (string)($r['images'] ?? '');
+        if ($imgs !== '' && $imgs !== '[]') {
+            $with_images++;
+        }
+    }
+
+    $stats['total_reviews'] = $total;
+    $stats['avg_rating'] = $total > 0 ? round($sum / $total, 2) : 0;
+    $stats['five_star'] = $five;
+    $stats['with_images'] = $with_images;
 }
 ?>
 <!DOCTYPE html>
@@ -64,31 +97,16 @@ try {
         .card:hover { transform: translateY(-2px); box-shadow: 0 14px 25px -15px rgba(16, 133, 77, 0.25); }
         .nav-link { transition: all 0.25s ease; }
         .nav-link.active { color: #10854d; border-bottom: 2px solid #10854d; }
+        .gradient-text {
+            background: linear-gradient(135deg, #10854d 0%, #059669 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
     </style>
 </head>
 <body class="min-h-screen">
-    <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center"><span class="text-white font-bold text-xl">H</span></div>
-                    <span class="text-xl font-bold text-[#10854d]">Harvee Farm</span>
-                </a>
-
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="dashboard.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-home mr-1"></i> Dashboard</a>
-                    <a href="products/products.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-box mr-1"></i> Products</a>
-                    <a href="orders.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-shopping-bag mr-1"></i> Orders</a>
-                    <a href="reviews.php" class="nav-link active text-gray-700 font-medium"><i class="fas fa-star mr-1"></i> Reviews</a>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-600 hidden md:inline">Hi, <?php echo htmlspecialchars($first_name); ?></span>
-                    <a href="../auth/logout.php" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"><i class="fas fa-sign-out-alt mr-1"></i> Logout</a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <?php require_once __DIR__ . '/partials/navbar.php'; ?>
 
     <main class="container mx-auto px-4 py-8">
         <div class="bg-gradient-to-br from-[#10854d] to-[#0d6e40] rounded-2xl p-8 text-white mb-6">
@@ -128,12 +146,26 @@ try {
                                 $review_images = $decoded;
                             }
                         }
+
+                        $product_thumb = trim($review['product_image_url'] ?? '');
+                        if ($product_thumb !== '' && strpos($product_thumb, 'http') !== 0 && ($product_thumb[0] ?? '') !== '/' && substr($product_thumb, 0, 3) !== '../') {
+                            $product_thumb = '../' . $product_thumb;
+                        }
                     ?>
                     <div class="card bg-white rounded-xl border border-gray-100 p-5">
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-                            <div>
-                                <p class="font-bold text-gray-800"><?php echo htmlspecialchars($review['product_name']); ?></p>
-                                <p class="text-sm text-gray-500">By <?php echo htmlspecialchars(trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''))); ?> | <?php echo date('M d, Y', strtotime($review['created_at'])); ?></p>
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                    <?php if ($product_thumb !== ''): ?>
+                                        <img src="<?php echo htmlspecialchars($product_thumb); ?>" alt="<?php echo htmlspecialchars($review['product_name'] ?? 'Product'); ?>" class="w-10 h-10 object-cover">
+                                    <?php else: ?>
+                                        <i class="fas fa-seedling text-gray-400"></i>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-gray-800"><?php echo htmlspecialchars($review['product_name']); ?></p>
+                                    <p class="text-sm text-gray-500">By <?php echo htmlspecialchars(trim(($review['first_name'] ?? '') . ' ' . ($review['last_name'] ?? ''))); ?> | <?php echo date('M d, Y', strtotime($review['created_at'])); ?></p>
+                                </div>
                             </div>
                             <div class="flex items-center gap-1 text-amber-500">
                                 <?php for ($s = 1; $s <= 5; $s++): ?>

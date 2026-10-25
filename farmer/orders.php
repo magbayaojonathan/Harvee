@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../shared/demo_data.php';
 
 // Check if user is logged in as farmer
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
@@ -84,6 +85,7 @@ $stats = [
 ];
 
 $orders = [];
+$using_demo_orders = false;
 
 try {
     // Stats
@@ -114,9 +116,11 @@ try {
         SELECT o.id, o.order_number, o.order_status, o.payment_status, o.created_at,
                u.first_name, u.last_name,
                COUNT(oi.id) AS item_count,
-               COALESCE(SUM(oi.total_price), 0) AS farmer_total
+               COALESCE(SUM(oi.total_price), 0) AS farmer_total,
+               COALESCE(MIN(p.image_url), '') AS preview_image
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN products p ON oi.product_id = p.id
         JOIN users u ON o.customer_id = u.id
         WHERE oi.farmer_id = ?
     ";
@@ -139,6 +143,33 @@ try {
     $message = 'Failed to load orders.';
     $message_type = 'error';
     error_log('Farmer orders load error: ' . $e->getMessage());
+}
+
+// Demo fallback (only when there are zero orders for this farmer and no filter)
+if (empty($orders) && $status_filter === 'all' && (int)($stats['total'] ?? 0) === 0) {
+    $orders = harvee_demo_farmer_orders_with_image_base('../assets/images');
+    $using_demo_orders = true;
+
+    $stats = [
+        'total' => 0,
+        'pending' => 0,
+        'processing' => 0,
+        'shipped' => 0,
+        'delivered' => 0,
+        'cancelled' => 0,
+        'revenue' => 0,
+    ];
+
+    foreach ($orders as $o) {
+        $status = (string)($o['order_status'] ?? '');
+        $stats['total']++;
+        if (isset($stats[$status])) {
+            $stats[$status]++;
+        }
+        if ($status === 'delivered') {
+            $stats['revenue'] += (float)($o['farmer_total'] ?? 0);
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -198,41 +229,13 @@ try {
         .status-delivered { background: #dcfce7; color: #166534; }
         .status-cancelled, .status-refunded { background: #fee2e2; color: #991b1b; }
     </style>
-</head>
-<body class="min-h-screen">
-    <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <a href="dashboard.php" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-[#10854d] rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-xl">H</span>
-                    </div>
-                    <span class="text-xl font-bold gradient-text">Harvee Farm</span>
-                </a>
-
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="dashboard.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-home mr-1"></i> Dashboard</a>
-                    <a href="products/products.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-box mr-1"></i> Products</a>
-                    <a href="orders.php" class="nav-link active text-gray-700 font-medium"><i class="fas fa-shopping-bag mr-1"></i> Orders</a>
-                    <a href="reviews.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-star mr-1"></i> Reviews</a>
-                    <a href="profile.php" class="nav-link text-gray-700 font-medium"><i class="fas fa-user mr-1"></i> Profile</a>
-                </div>
-
-                <div class="flex items-center space-x-3">
-                    <a href="products/add.php" class="hidden md:inline-flex items-center px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-all shadow-md">
-                        <i class="fas fa-plus mr-2"></i> Add Product
-                    </a>
-                    <a href="../auth/logout.php" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
-                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
-                    </a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mx-auto px-4 py-8">
-        <div class="hero rounded-2xl p-8 mb-8 text-white">
-            <h1 class="text-3xl md:text-4xl font-bold mb-2">Orders Management</h1>
+	</head>
+	<body class="min-h-screen">
+	    <?php require_once __DIR__ . '/partials/navbar.php'; ?>
+	
+	    <main class="container mx-auto px-4 py-8">
+	        <div class="hero rounded-2xl p-8 mb-8 text-white">
+	            <h1 class="text-3xl md:text-4xl font-bold mb-2">Orders Management</h1>
             <p class="text-white/90 text-lg">Confirm new orders so drivers can claim and deliver them, <?php echo htmlspecialchars($first_name); ?>.</p>
         </div>
 
@@ -291,10 +294,28 @@ try {
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach ($orders as $order): ?>
+                                <?php
+                                    $thumb = trim($order['preview_image'] ?? '');
+                                    $is_demo = !empty($order['is_demo']);
+                                    if ($thumb !== '' && strpos($thumb, 'http') !== 0 && ($thumb[0] ?? '') !== '/' && substr($thumb, 0, 3) !== '../') {
+                                        $thumb = '../' . $thumb;
+                                    }
+                                ?>
                                 <tr class="hover:bg-gray-50">
                                     <td class="px-6 py-4">
-                                        <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($order['order_number'] ?: ('ORD-' . str_pad((string)$order['id'], 6, '0', STR_PAD_LEFT))); ?></p>
-                                        <p class="text-xs text-gray-500"><?php echo date('M d, Y h:i A', strtotime($order['created_at'])); ?></p>
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 bg-[#10854d]/10 rounded-lg flex items-center justify-center overflow-hidden">
+                                                <?php if ($thumb !== ''): ?>
+                                                    <img src="<?php echo htmlspecialchars($thumb); ?>" alt="Order preview" class="w-10 h-10 object-cover">
+                                                <?php else: ?>
+                                                    <i class="fas fa-receipt text-[#10854d]"></i>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div>
+                                                <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($order['order_number'] ?: ('ORD-' . str_pad((string)$order['id'], 6, '0', STR_PAD_LEFT))); ?></p>
+                                                <p class="text-xs text-gray-500"><?php echo date('M d, Y h:i A', strtotime($order['created_at'])); ?></p>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 text-gray-700"><?php echo htmlspecialchars(trim(($order['first_name'] ?? '') . ' ' . ($order['last_name'] ?? '')) ?: 'Customer'); ?></td>
                                     <td class="px-6 py-4 text-gray-700"><?php echo (int)$order['item_count']; ?></td>
@@ -305,7 +326,9 @@ try {
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <?php if (($order['order_status'] ?? '') === 'pending'): ?>
+                                        <?php if ($is_demo): ?>
+                                            <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600">Demo</span>
+                                        <?php elseif (($order['order_status'] ?? '') === 'pending'): ?>
                                             <form method="POST" action="" class="flex items-center gap-2">
                                                 <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
                                                 <input type="hidden" name="new_status" value="confirmed">

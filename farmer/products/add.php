@@ -2,6 +2,7 @@
 session_start();
 // Fix the path - go up two levels from farmer/products/
 require_once dirname(dirname(dirname(__FILE__))) . '/config/database.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/shared/profile_photo.php';
 
 // Check if user is logged in as farmer/admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION['role'] !== 'admin')) {
@@ -13,6 +14,22 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'farmer' && $_SESSION
 $user_id = $_SESSION['user_id'];
 $message = '';
 $errors = [];
+
+$profile_image_value = (string)($_SESSION['profile_image'] ?? '');
+if (($profile_image_value === '' || $profile_image_value === 'default-avatar.png') && isset($pdo, $_SESSION['user_id'])) {
+    try {
+        $stmt = $pdo->prepare("SELECT profile_image FROM users WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $profile_image_value = (string)($row['profile_image'] ?? '');
+        if ($profile_image_value !== '' && $profile_image_value !== 'default-avatar.png') {
+            $_SESSION['profile_image'] = $profile_image_value;
+        }
+    } catch (PDOException $e) {
+        // ignore
+    }
+}
+$profile_photo_url = harvee_profile_photo_url($profile_image_value, '../../');
 
 // Get categories from database
 $categories = [];
@@ -173,17 +190,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 <a href="products.php" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
     <i class="fas fa-box mr-2"></i>View Products
 </a>
-                    <div class="relative group">
-                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
-                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center">
-                                <span class="text-white font-bold text-sm">
-                                    <?php echo strtoupper(substr($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'F', 0, 1)); ?>
-                                </span>
-                            </div>
-                            <span class="hidden md:inline text-gray-700 font-medium">
-                                <?php echo htmlspecialchars($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'Farmer'); ?>
-                            </span>
-                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                    <div class="relative group">
+	                        <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
+	                            <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center overflow-hidden">
+	                                <?php if ($profile_photo_url !== ''): ?>
+	                                    <img src="<?php echo htmlspecialchars($profile_photo_url); ?>" alt="Profile photo" class="w-8 h-8 object-cover">
+	                                <?php else: ?>
+	                                    <span class="text-white font-bold text-sm">
+	                                        <?php echo strtoupper(substr($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'F', 0, 1)); ?>
+	                                    </span>
+	                                <?php endif; ?>
+	                            </div>
+	                            <span class="hidden md:inline text-gray-700 font-medium">
+	                                <?php echo htmlspecialchars($_SESSION['first_name'] ?? $_SESSION['name'] ?? 'Farmer'); ?>
+	                            </span>
+	                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
