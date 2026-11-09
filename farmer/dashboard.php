@@ -32,10 +32,10 @@ try {
     $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM products WHERE farmer_id = ?");
     $stmt->execute([$user_id]);
     $stats['total_products'] = $stmt->fetch()['count'] ?? 0;
-    
+
     // Get total orders and revenue
     $stmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT o.id) as order_count, 
+        SELECT COUNT(DISTINCT o.id) as order_count,
                COALESCE(SUM(oi.total_price), 0) as revenue
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
@@ -45,7 +45,7 @@ try {
     $result = $stmt->fetch();
     $stats['total_orders'] = $result['order_count'] ?? 0;
     $stats['total_revenue'] = $result['revenue'] ?? 0;
-    
+
     // Get pending orders
     $stmt = $pdo->prepare("
         SELECT COUNT(DISTINCT o.id) as count
@@ -55,16 +55,16 @@ try {
     ");
     $stmt->execute([$user_id]);
     $stats['pending_orders'] = $stmt->fetch()['count'] ?? 0;
-    
+
     // Get low stock products (stock <= 10)
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) as count 
-        FROM products 
+        SELECT COUNT(*) as count
+        FROM products
         WHERE farmer_id = ? AND stock_quantity <= 10 AND stock_quantity > 0
     ");
     $stmt->execute([$user_id]);
     $stats['low_stock'] = $stmt->fetch()['count'] ?? 0;
-    
+
     // Get total unique customers
     $stmt = $pdo->prepare("
         SELECT COUNT(DISTINCT o.customer_id) as count
@@ -74,7 +74,7 @@ try {
     ");
     $stmt->execute([$user_id]);
     $stats['total_customers'] = $stmt->fetch()['count'] ?? 0;
-    
+
     // Get recent orders
     $stmt = $pdo->prepare("
         SELECT o.id, o.order_number, o.total, o.order_status, o.created_at,
@@ -84,13 +84,13 @@ try {
         JOIN order_items oi ON o.id = oi.order_id
         JOIN users u ON o.customer_id = u.id
         WHERE oi.farmer_id = ?
-        GROUP BY o.id
+        GROUP BY o.id, u.id
         ORDER BY o.created_at DESC
         LIMIT 5
     ");
     $stmt->execute([$user_id]);
     $recent_orders = $stmt->fetchAll();
-    
+
     // Get low stock products list
     $stmt = $pdo->prepare("
         SELECT id, name, price, stock_quantity, unit
@@ -101,7 +101,7 @@ try {
     ");
     $stmt->execute([$user_id]);
     $low_stock_products = $stmt->fetchAll();
-    
+
     // Get recent products
     $stmt = $pdo->prepare("
         SELECT id, name, price, stock_quantity, created_at
@@ -112,7 +112,7 @@ try {
     ");
     $stmt->execute([$user_id]);
     $recent_products = $stmt->fetchAll();
-    
+
 } catch (PDOException $e) {
     error_log("Dashboard error: " . $e->getMessage());
 }
@@ -180,14 +180,14 @@ try {
         .status-shipped { background: #c7d2fe; color: #3730a3; }
         .status-delivered { background: #dcfce7; color: #166534; }
         .status-cancelled { background: #fee2e2; color: #991b1b; }
-        
+
         .gradient-text {
             background: linear-gradient(135deg, #10854d 0%, #059669 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .nav-link {
             transition: all 0.3s ease;
         }
@@ -210,7 +210,7 @@ try {
                     <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                     <span class="text-xl font-bold gradient-text">Harvee Farm</span>
                 </a>
-                
+
                 <!-- Main Navigation Links -->
                 <div class="hidden md:flex items-center space-x-8">
                     <a href="dashboard.php" class="nav-link text-gray-700 font-medium <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
@@ -236,7 +236,7 @@ try {
                     <a href="products/add.php" class="hidden md:inline-flex items-center px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-all shadow-md hover:shadow-lg">
                         <i class="fas fa-plus mr-2"></i> Add Product
                     </a>
-                    
+
                     <!-- Profile Dropdown -->
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="flex items-center space-x-2 p-1.5 hover:bg-gray-100 rounded-full transition-all">
@@ -250,7 +250,7 @@ try {
                             </span>
                             <i class="fas fa-chevron-down text-xs text-gray-500"></i>
                         </button>
-                        
+
                         <!-- Dropdown Menu -->
                         <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100" style="display: none;">
                             <div class="px-4 py-3 border-b border-gray-100">
@@ -289,10 +289,10 @@ try {
                         Manage your farm products, track orders, and grow your business with Harvee.
                     </p>
                 </div>
-                
+
                 <!-- Quick Stats Row -->
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-8">
-                    
+
                 </div>
             </div>
         </div>
@@ -379,7 +379,7 @@ try {
                             View All <i class="fas fa-arrow-right ml-1 text-xs"></i>
                         </a>
                     </div>
-                    
+
                     <?php if (empty($recent_orders)): ?>
                         <div class="text-center py-8">
                             <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -427,7 +427,7 @@ try {
                             View All <i class="fas fa-arrow-right ml-1 text-xs"></i>
                         </a>
                     </div>
-                    
+
                     <?php if (empty($recent_products)): ?>
                         <div class="text-center py-8">
                             <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -464,7 +464,7 @@ try {
                         <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
                         Low Stock Alert
                     </h2>
-                    
+
                     <?php if (empty($low_stock_products)): ?>
                         <div class="text-center py-6">
                             <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -489,7 +489,7 @@ try {
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                        
+
                         <?php if ($stats['low_stock'] > 5): ?>
                             <div class="mt-4 text-center">
                                 <a href="products/products.php?stock=low" class="text-sm text-red-600 hover:underline">
@@ -506,18 +506,18 @@ try {
                         <i class="fas fa-bolt text-[#10854d] mr-2"></i>
                         Quick Actions
                     </h2>
-                    
+
                     <div class="grid grid-cols-2 gap-3">
                         <a href="products/add.php" class="p-4 bg-green-50 rounded-lg text-center hover:bg-green-100 transition-all group">
                             <i class="fas fa-plus-circle text-2xl text-[#10854d] mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Add Product</span>
                         </a>
-                        
+
                         <a href="products/products.php" class="p-4 bg-blue-50 rounded-lg text-center hover:bg-blue-100 transition-all group">
                             <i class="fas fa-boxes text-2xl text-blue-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Manage Products</span>
                         </a>
-                        
+
                         <a href="orders.php?status=pending" class="p-4 bg-yellow-50 rounded-lg text-center hover:bg-yellow-100 transition-all group">
                             <i class="fas fa-clock text-2xl text-yellow-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Pending Orders</span>
@@ -529,7 +529,7 @@ try {
                             <i class="fas fa-star text-2xl text-amber-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Reviews</span>
                         </a>
-                        
+
                         <a href="earnings.php" class="p-4 bg-purple-50 rounded-lg text-center hover:bg-purple-100 transition-all group">
                             <i class="fas fa-chart-line text-2xl text-purple-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Earnings</span>
@@ -585,7 +585,7 @@ try {
                     </div>
                     <p class="text-gray-600 text-sm">Empowering farmers to reach more customers with fresh, quality products.</p>
                 </div>
-                
+
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-3">Quick Links</h4>
                     <ul class="space-y-2 text-sm">
@@ -595,7 +595,7 @@ try {
                         <li><a href="earnings.php" class="text-gray-600 hover:text-[#10854d]">Earnings</a></li>
                     </ul>
                 </div>
-                
+
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-3">Support</h4>
                     <ul class="space-y-2 text-sm">
@@ -605,7 +605,7 @@ try {
                         <li><a href="terms.php" class="text-gray-600 hover:text-[#10854d]">Terms of Service</a></li>
                     </ul>
                 </div>
-                
+
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-3">Contact</h4>
                     <ul class="space-y-2 text-sm text-gray-600">
@@ -615,7 +615,7 @@ try {
                     </ul>
                 </div>
             </div>
-            
+
             <div class="border-t border-gray-200 mt-8 pt-8 text-center">
                 <p class="text-gray-500 text-sm">© <?php echo date('Y'); ?> Harvee Farm. All rights reserved. Growing together with our farmers.</p>
             </div>

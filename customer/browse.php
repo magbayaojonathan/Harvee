@@ -18,7 +18,7 @@ try {
     $product_count = $debug_stmt->fetchColumn();
     error_log("=== BROWSE.PHP DEBUG ===");
     error_log("Products with stock: $product_count");
-    
+
     $cart_check = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ?");
     $cart_check->execute([$user_id]);
     $existing_cart = $cart_check->fetchColumn();
@@ -31,20 +31,20 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $product_id = (int)($_POST['product_id'] ?? 0);
     $quantity = (int)($_POST['quantity'] ?? 1);
-    
+
     if ($product_id > 0 && $quantity > 0) {
         // Check if product exists and is in stock
         $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
         $stmt->execute([$product_id]);
         $product = $stmt->fetch();
-        
+
         if ($product) {
             if ($product['stock_quantity'] >= $quantity) {
                 // Check if item already in cart
                 $stmt = $pdo->prepare("SELECT * FROM cart WHERE user_id = ? AND product_id = ?");
                 $stmt->execute([$user_id, $product_id]);
                 $existing_item = $stmt->fetch();
-                
+
                 if ($existing_item) {
                     // Update quantity
                     $new_quantity = $existing_item['quantity'] + $quantity;
@@ -66,18 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     // Add new item - with price_at_time
                     try {
                         error_log("Adding to cart - User: $user_id, Product: $product_id, Qty: $quantity, Price: {$product['price']}");
-                        
+
                         $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity, price_at_time) VALUES (?, ?, ?, ?)");
                         $result = $stmt->execute([$user_id, $product_id, $quantity, $product['price']]);
-                        
+
                         error_log("INSERT result: " . ($result ? 'SUCCESS' : 'FAILED'));
-                        
+
                         // Verify the insert worked
                         $verify = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ? AND product_id = ?");
                         $verify->execute([$user_id, $product_id]);
                         $verify_count = $verify->fetchColumn();
                         error_log("Cart verification - items for this product: $verify_count");
-                        
+
                         if ($result && $verify_count > 0) {
                             $message = "✓ Product added to cart successfully!";
                             // Redirect to cart page to show the item
@@ -153,13 +153,13 @@ try {
     $offset = ($page - 1) * $limit;
 
     // Build base query with correct column names
-    $sql = "SELECT SQL_CALC_FOUND_ROWS 
+    $sql = "SELECT
                    p.*,
                    c.name AS category_name
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.stock_quantity > 0";
-            
+
     $count_sql = "SELECT COUNT(*) FROM products p WHERE p.stock_quantity > 0";
 
     $params = [];
@@ -167,8 +167,8 @@ try {
 
     // Apply filters
     if (!empty($search)) {
-        $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
-        $count_sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+        $sql .= " AND (p.name ILIKE ? OR p.description ILIKE ?)";
+        $count_sql .= " AND (p.name ILIKE ? OR p.description ILIKE ?)";
         $search_term = "%$search%";
         $params[] = $search_term;
         $params[] = $search_term;
@@ -253,7 +253,7 @@ try {
     }
     $total_products = $count_stmt->fetchColumn();
     $total_pages = ceil($total_products / $limit);
-    
+
 } catch (PDOException $e) {
     // Log error and set empty products array
     error_log("Browse page error: " . $e->getMessage());
@@ -404,14 +404,14 @@ try {
                         <span class="text-gray-700 font-medium ml-2">Browse Products</span>
                     </div>
                 </div>
-                
+
                 <!-- Search Bar -->
                 <div class="flex-1 max-w-2xl mx-4">
                     <form method="GET" action="" class="relative">
                         <div class="relative">
-                            <input type="text" 
-                                   name="search" 
-                                   placeholder="Search products..." 
+                            <input type="text"
+                                   name="search"
+                                   placeholder="Search products..."
                                    value="<?php echo htmlspecialchars($search); ?>"
                                    class="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-full focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20">
                             <div class="absolute left-4 top-1/2 transform -translate-y-1/2">
@@ -422,7 +422,7 @@ try {
                         </div>
                     </form>
                 </div>
-                
+
                 <!-- Cart & User Menu -->
                 <div class="flex items-center space-x-4">
                     <!-- Wishlist Button -->
@@ -448,7 +448,7 @@ try {
                             </span>
                         <?php endif; ?>
                     </a>
-                    
+
                     <!-- User Menu -->
                     <div class="relative group">
                         <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
@@ -464,7 +464,7 @@ try {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
-                        
+
                         <!-- Dropdown Menu -->
                         <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 hidden group-hover:block">
                             <a href="dashboard.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
@@ -550,7 +550,7 @@ try {
                             </a>
                         <?php endif; ?>
                     </div>
-                    
+
                     <!-- Filter Form -->
                     <form method="GET" action="" class="space-y-6">
                         <!-- Price Range -->
@@ -558,22 +558,22 @@ try {
                             <h3 class="font-medium text-gray-700 mb-3">Price Range</h3>
                             <div class="flex gap-3">
                                 <div class="flex-1">
-                                    <input type="number" 
-                                           name="min_price" 
-                                           placeholder="Min ₱" 
+                                    <input type="number"
+                                           name="min_price"
+                                           placeholder="Min ₱"
                                            value="<?php echo htmlspecialchars($min_price); ?>"
                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
                                 </div>
                                 <div class="flex-1">
-                                    <input type="number" 
-                                           name="max_price" 
-                                           placeholder="Max ₱" 
+                                    <input type="number"
+                                           name="max_price"
+                                           placeholder="Max ₱"
                                            value="<?php echo htmlspecialchars($max_price); ?>"
                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- Category -->
                         <div>
                             <h3 class="font-medium text-gray-700 mb-3">Category</h3>
@@ -586,7 +586,7 @@ try {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        
+
                         <!-- Sort By -->
                         <div>
                             <h3 class="font-medium text-gray-700 mb-3">Sort By</h3>
@@ -599,14 +599,14 @@ try {
                                 <option value="stock_high" <?php echo ($sort == 'stock_high') ? 'selected' : ''; ?>>Most Stock</option>
                             </select>
                         </div>
-                        
+
                         <!-- Apply Filters Button -->
-                        <button type="submit" 
+                        <button type="submit"
                                 class="w-full py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                             Apply Filters
                         </button>
                     </form>
-                    
+
                     <!-- Active Filters -->
                     <?php if ($search || $category || $min_price || $max_price): ?>
                         <div class="mt-6 pt-6 border-t border-gray-200">
@@ -620,7 +620,7 @@ try {
                                         </a>
                                     </span>
                                 <?php endif; ?>
-                                
+
                                 <?php if ($category > 0): ?>
                                     <span class="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full flex items-center">
                                         Category: <?php echo htmlspecialchars($selected_category_name ?: ('#' . $category)); ?>
@@ -629,7 +629,7 @@ try {
                                         </a>
                                     </span>
                                 <?php endif; ?>
-                                
+
                                 <?php if ($min_price): ?>
                                     <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full flex items-center">
                                         Min: ₱<?php echo htmlspecialchars($min_price); ?>
@@ -638,7 +638,7 @@ try {
                                         </a>
                                     </span>
                                 <?php endif; ?>
-                                
+
                                 <?php if ($max_price): ?>
                                     <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full flex items-center">
                                         Max: ₱<?php echo htmlspecialchars($max_price); ?>
@@ -651,7 +651,7 @@ try {
                         </div>
                     <?php endif; ?>
                 </div>
-                
+
                 <!-- Quick Stats -->
                 <div class="bg-white rounded-xl shadow-sm p-6 mt-6">
                     <h3 class="font-medium text-gray-700 mb-4">Store Stats</h3>
@@ -675,7 +675,7 @@ try {
                     </div>
                 </div>
             </div>
-            
+
             <!-- Main Content -->
             <div class="lg:w-3/4">
                 <!-- Results Header -->
@@ -707,7 +707,7 @@ try {
                         </div>
                     <?php endif; ?>
                 </div>
-                
+
                 <!-- Products Grid -->
                 <?php if (empty($products)): ?>
                     <!-- Empty State -->
@@ -736,7 +736,7 @@ try {
                     </div>
                 <?php else: ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <?php foreach ($products as $product): 
+                        <?php foreach ($products as $product):
                             $is_low_stock = ($product['stock_quantity'] ?? 0) < 10;
                             $is_new = isset($product['created_at']) && strtotime($product['created_at']) > strtotime('-7 days');
                         ?>
@@ -749,41 +749,41 @@ try {
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                         </svg>
                                     </div>
-                                    
+
                                     <!-- Badges -->
                                     <?php if ($is_new): ?>
                                         <span class="category-tag px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-full">
                                             NEW
                                         </span>
                                     <?php endif; ?>
-                                    
+
                                     <?php if ($is_low_stock && ($product['stock_quantity'] ?? 0) > 0): ?>
                                         <span class="stock-badge px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
                                             Only <?php echo $product['stock_quantity']; ?> left
                                         </span>
                                     <?php endif; ?>
-                                    
+
                                     <span class="absolute bottom-3 left-3 price-tag text-sm">
                                         ₱<?php echo number_format($product['price'] ?? 0, 2); ?>
                                     </span>
-                                    
+
                                     <?php if (!empty($product['category_name'])): ?>
                                         <span class="absolute bottom-3 right-3 px-3 py-1 bg-white/90 text-gray-700 text-xs font-medium rounded-full">
                                             <?php echo htmlspecialchars($product['category_name']); ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
-                                
+
                                 <!-- Product Info -->
                                 <div class="p-5">
                                     <h3 class="font-bold text-gray-800 text-lg mb-2 truncate">
                                         <?php echo htmlspecialchars($product['name'] ?? 'Unnamed Product'); ?>
                                     </h3>
-                                    
+
                                     <p class="text-gray-600 text-sm mb-4 line-clamp-2 h-10">
                                         <?php echo htmlspecialchars($product['description'] ?? 'No description available'); ?>
                                     </p>
-                                    
+
                                     <!-- Store Info -->
                                     <div class="flex items-center mb-4">
                                         <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center mr-3">
@@ -796,7 +796,7 @@ try {
                                             <p class="text-xs text-gray-500">Direct from farm</p>
                                         </div>
                                     </div>
-                                    
+
                                     <!-- Stock & Add to Cart -->
                                     <div class="flex items-center justify-between">
                                         <div class="text-sm">
@@ -813,14 +813,14 @@ try {
                                             <input type="hidden" name="product_id" value="<?php echo $product['id'] ?? 0; ?>">
                                             <input type="hidden" name="add_to_cart" value="1">
                                             <div class="relative">
-                                                <input type="number" 
-                                                       name="quantity" 
-                                                       value="1" 
-                                                       min="1" 
+                                                <input type="number"
+                                                       name="quantity"
+                                                       value="1"
+                                                       min="1"
                                                        max="<?php echo isset($product['stock_quantity']) ? min($product['stock_quantity'], 10) : 1; ?>"
                                                        class="w-16 px-3 py-1 border border-gray-300 rounded-lg text-center text-sm">
                                             </div>
-                                            <button type="submit" 
+                                            <button type="submit"
                                                     class="px-4 py-2 bg-[#10854d] text-white text-sm font-medium rounded-lg hover:bg-[#0d6e40] transition-colors flex items-center">
                                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
@@ -839,15 +839,15 @@ try {
                                             </button>
                                         </form>
                                     </div>
-                                    
+
                                     <!-- Quick Actions -->
                                     <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between">
-                                        <button onclick="showProductDetails(<?php echo $product['id'] ?? 0; ?>)" 
+                                        <button onclick="showProductDetails(<?php echo $product['id'] ?? 0; ?>)"
                                                 class="text-sm text-[#10854d] hover:underline">
                                             View Details
                                         </button>
                                         <?php if (!empty($product['category_id']) && !empty($product['category_name'])): ?>
-                                            <a href="?category=<?php echo (int)$product['category_id']; ?>" 
+                                            <a href="?category=<?php echo (int)$product['category_id']; ?>"
                                                class="text-sm text-gray-600 hover:text-[#10854d]">
                                                 More <?php echo htmlspecialchars($product['category_name']); ?>
                                             </a>
@@ -857,32 +857,32 @@ try {
                             </div>
                         <?php endforeach; ?>
                     </div>
-                    
+
                     <!-- Pagination -->
                     <?php if ($total_pages > 1): ?>
                         <div class="mt-8 flex justify-center">
                             <nav class="flex items-center space-x-2">
                                 <?php if ($page > 1): ?>
-                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page - 1])); ?>" 
+                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page - 1])); ?>"
                                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                                         Previous
                                     </a>
                                 <?php endif; ?>
-                                
-                                <?php 
+
+                                <?php
                                 $start = max(1, $page - 2);
                                 $end = min($total_pages, $page + 2);
-                                
-                                for ($i = $start; $i <= $end; $i++): 
+
+                                for ($i = $start; $i <= $end; $i++):
                                 ?>
-                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $i])); ?>" 
+                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $i])); ?>"
                                        class="px-4 py-2 border rounded-lg <?php echo $i == $page ? 'bg-[#10854d] text-white border-[#10854d]' : 'border-gray-300 hover:bg-gray-50'; ?>">
                                         <?php echo $i; ?>
                                     </a>
                                 <?php endfor; ?>
-                                
+
                                 <?php if ($page < $total_pages): ?>
-                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page + 1])); ?>" 
+                                    <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page + 1])); ?>"
                                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                                         Next
                                     </a>
@@ -890,10 +890,10 @@ try {
                             </nav>
                         </div>
                     <?php endif; ?>
-                    
+
                     <!-- Results Summary -->
                     <div class="mt-8 text-center text-gray-500 text-sm">
-                        Page <?php echo $page; ?> of <?php echo $total_pages; ?> 
+                        Page <?php echo $page; ?> of <?php echo $total_pages; ?>
                         • <?php echo $total_products; ?> total products
                         <?php if ($search): ?>
                             • Searching for "<?php echo htmlspecialchars($search); ?>"
@@ -943,11 +943,11 @@ try {
                     <span class="ml-3 text-gray-600">Loading product details...</span>
                 </div>
             `;
-            
+
             // Show modal
             document.getElementById('productModal').classList.remove('hidden');
             document.getElementById('productModal').classList.add('flex');
-            
+
             // Load product details
             fetch(`../product_details.php?id=${productId}`)
                 .then(response => {
@@ -977,13 +977,13 @@ try {
                     `;
                 });
         }
-        
+
         // Close modal
         function closeModal() {
             document.getElementById('productModal').classList.add('hidden');
             document.getElementById('productModal').classList.remove('flex');
         }
-        
+
         // Close modal when clicking outside
         document.addEventListener('click', function(e) {
             const modal = document.getElementById('productModal');
@@ -991,14 +991,14 @@ try {
                 closeModal();
             }
         });
-        
+
         // Escape key to close modal
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeModal();
             }
         });
-        
+
         // Auto-submit search when typing stops (debounced)
         let searchTimeout;
         document.querySelector('input[name="search"]')?.addEventListener('input', function(e) {
@@ -1007,7 +1007,7 @@ try {
                 this.form.submit();
             }, 500);
         });
-        
+
         // Add to cart with animation
         document.querySelectorAll('form[action="cart.php"]').forEach(form => {
             form.addEventListener('submit', function(e) {
@@ -1016,7 +1016,7 @@ try {
                     const originalText = button.innerHTML;
                     button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Adding...';
                     button.disabled = true;
-                    
+
                     // Re-enable button after 2 seconds if something goes wrong
                     setTimeout(() => {
                         button.innerHTML = originalText;

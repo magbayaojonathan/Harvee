@@ -45,10 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             $update_stmt = $pdo->prepare("
                 UPDATE users
-                SET first_name = ?, last_name = ?, name = ?, email = ?, phone = ?, address = ?, updated_at = NOW()
+                SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, updated_at = NOW()
                 WHERE id = ?
             ");
-            $update_stmt->execute([$first_name, $last_name, $name, $email, $phone, $address, $user_id]);
+            $update_stmt->execute([$first_name, $last_name, $email, $phone, $address, $user_id]);
 
             $_SESSION['first_name'] = $first_name;
             $_SESSION['last_name'] = $last_name;

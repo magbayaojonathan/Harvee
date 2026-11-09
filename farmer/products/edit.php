@@ -16,10 +16,10 @@ $errors = [];
 // Get product details
 $product = null;
 if ($product_id > 0) {
-    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND farmer_id = ?");
+    $stmt = $pdo->prepare("SELECT p.*, c.name AS category FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = ? AND p.farmer_id = ?");
     $stmt->execute([$product_id, $user_id]);
     $product = $stmt->fetch();
-    
+
     if (!$product) {
         header('Location: products.php');
         exit();
@@ -37,37 +37,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category = trim($_POST['category'] ?? '');
     $price = trim($_POST['price'] ?? '');
     $stock = trim($_POST['stock'] ?? '');
-    
+
     // Validate input
     if (empty($product_name)) {
         $errors[] = "Product name is required";
     }
-    
+
     if (empty($description)) {
         $errors[] = "Description is required";
     }
-    
+
     if (empty($category)) {
         $errors[] = "Category is required";
     }
-    
+
     if (empty($price) || !is_numeric($price) || $price <= 0) {
         $errors[] = "Valid price is required";
     }
-    
-    if (empty($stock) || !is_numeric($stock) || $stock < 0) {
+
+    if ($stock === '' || !is_numeric($stock) || $stock < 0) {
         $errors[] = "Valid stock quantity is required";
     }
-    
+
     // If no errors, update product
     if (empty($errors)) {
         try {
             $stmt = $pdo->prepare("
-                UPDATE products 
-                SET product_name = ?, description = ?, category = ?, price = ?, stock = ?
+                UPDATE products
+                SET name = ?, description = ?, category_id = (SELECT id FROM categories WHERE name = ?), price = ?, stock_quantity = ?
                 WHERE id = ? AND farmer_id = ?
             ");
-            
+
             $success = $stmt->execute([
                 $product_name,
                 $description,
@@ -77,17 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $product_id,
                 $user_id
             ]);
-            
+
             if ($success) {
                 $message = "✓ Product updated successfully!";
                 // Refresh product data
-                $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND farmer_id = ?");
+                $stmt = $pdo->prepare("SELECT p.*, c.name AS category FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = ? AND p.farmer_id = ?");
                 $stmt->execute([$product_id, $user_id]);
                 $product = $stmt->fetch();
             } else {
                 $errors[] = "Failed to update product. Please try again.";
             }
-            
+
         } catch (PDOException $e) {
             $errors[] = "Database error: " . $e->getMessage();
         }
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Get existing categories for suggestions
 $existing_categories = [];
 try {
-    $cat_stmt = $pdo->prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category");
+    $cat_stmt = $pdo->prepare("SELECT name FROM categories ORDER BY name");
     $cat_stmt->execute();
     $existing_categories = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) {
@@ -145,7 +145,7 @@ try {
             <!-- Page Header -->
             <div class="mb-8">
                 <h1 class="text-3xl font-bold text-[#10854d] mb-2">Edit Product</h1>
-                <p class="text-gray-600">Update product information for: <span class="font-medium"><?php echo htmlspecialchars($product['product_name']); ?></span></p>
+                <p class="text-gray-600">Update product information for: <span class="font-medium"><?php echo htmlspecialchars($product['name']); ?></span></p>
             </div>
 
             <!-- Messages -->
@@ -176,9 +176,9 @@ try {
                     <!-- Product Name -->
                     <div>
                         <label class="block text-gray-700 font-medium mb-2">Product Name</label>
-                        <input type="text" 
-                               name="product_name" 
-                               value="<?php echo htmlspecialchars($product['product_name']); ?>"
+                        <input type="text"
+                               name="product_name"
+                               value="<?php echo htmlspecialchars($product['name']); ?>"
                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20"
                                required>
                     </div>
@@ -186,7 +186,7 @@ try {
                     <!-- Description -->
                     <div>
                         <label class="block text-gray-700 font-medium mb-2">Description</label>
-                        <textarea name="description" 
+                        <textarea name="description"
                                   rows="4"
                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20"
                                   required><?php echo htmlspecialchars($product['description']); ?></textarea>
@@ -211,8 +211,8 @@ try {
                             <label class="block text-gray-700 font-medium mb-2">Price (₱)</label>
                             <div class="relative">
                                 <span class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500">₱</span>
-                                <input type="number" 
-                                       name="price" 
+                                <input type="number"
+                                       name="price"
                                        value="<?php echo htmlspecialchars($product['price']); ?>"
                                        step="0.01"
                                        min="0.01"
@@ -223,9 +223,9 @@ try {
 
                         <div>
                             <label class="block text-gray-700 font-medium mb-2">Stock Quantity</label>
-                            <input type="number" 
-                                   name="stock" 
-                                   value="<?php echo htmlspecialchars($product['stock']); ?>"
+                            <input type="number"
+                                   name="stock"
+                                   value="<?php echo htmlspecialchars($product['stock_quantity']); ?>"
                                    min="0"
                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20"
                                    required>
@@ -235,12 +235,12 @@ try {
                     <!-- Form Actions -->
                     <div class="pt-6 border-t border-gray-200">
                         <div class="flex justify-between">
-                            <a href="products.php" 
+                            <a href="products.php"
                                class="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300">
                                 Cancel
                             </a>
                             <div class="flex gap-3">
-                                <button type="submit" 
+                                <button type="submit"
                                         class="px-8 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40]">
                                     Update Product
                                 </button>
@@ -268,12 +268,12 @@ try {
                     </div>
                     <div>
                         <p class="text-sm text-blue-600">Status</p>
-                        <span class="px-2 py-1 text-xs rounded-full 
-                            <?php echo $product['stock'] == 0 ? 'bg-red-100 text-red-800' : 
-                                   ($product['stock'] < 10 ? 'bg-yellow-100 text-yellow-800' : 
+                        <span class="px-2 py-1 text-xs rounded-full
+                            <?php echo $product['stock_quantity'] == 0 ? 'bg-red-100 text-red-800' :
+                                   ($product['stock_quantity'] < 10 ? 'bg-yellow-100 text-yellow-800' :
                                    'bg-green-100 text-green-800'); ?>">
-                            <?php echo $product['stock'] == 0 ? 'Out of Stock' : 
-                                   ($product['stock'] < 10 ? 'Low Stock' : 'In Stock'); ?>
+                            <?php echo $product['stock_quantity'] == 0 ? 'Out of Stock' :
+                                   ($product['stock_quantity'] < 10 ? 'Low Stock' : 'In Stock'); ?>
                         </span>
                     </div>
                 </div>

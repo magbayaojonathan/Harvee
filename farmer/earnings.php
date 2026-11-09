@@ -56,8 +56,8 @@ try {
 
     $month_stmt = $pdo->prepare("
         SELECT
-            SUM(CASE WHEN DATE_FORMAT(o.created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN oi.total_price ELSE 0 END) AS this_month,
-            SUM(CASE WHEN DATE_FORMAT(o.created_at, '%Y-%m') = DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') THEN oi.total_price ELSE 0 END) AS last_month
+            SUM(CASE WHEN TO_CHAR(o.created_at, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM') THEN oi.total_price ELSE 0 END) AS this_month,
+            SUM(CASE WHEN TO_CHAR(o.created_at, 'YYYY-MM') = TO_CHAR(CURRENT_DATE - INTERVAL '1 month', 'YYYY-MM') THEN oi.total_price ELSE 0 END) AS last_month
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
         WHERE oi.farmer_id = ? AND o.order_status = 'delivered'
@@ -69,13 +69,13 @@ try {
 
     $monthly_stmt = $pdo->prepare("
         SELECT
-            DATE_FORMAT(o.created_at, '%Y-%m') AS month_key,
-            DATE_FORMAT(o.created_at, '%b %Y') AS month_label,
+            TO_CHAR(o.created_at, 'YYYY-MM') AS month_key,
+            TO_CHAR(o.created_at, 'Mon YYYY') AS month_label,
             COALESCE(SUM(oi.total_price), 0) AS amount
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
         $where
-        GROUP BY DATE_FORMAT(o.created_at, '%Y-%m'), DATE_FORMAT(o.created_at, '%b %Y')
+        GROUP BY TO_CHAR(o.created_at, 'YYYY-MM'), TO_CHAR(o.created_at, 'Mon YYYY')
         ORDER BY month_key DESC
         LIMIT 12
     ");

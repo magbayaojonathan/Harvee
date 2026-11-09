@@ -67,11 +67,11 @@ try {
 
     if ($search !== '') {
         $sql .= " AND (
-            u.first_name LIKE ? OR
-            u.last_name LIKE ? OR
-            u.name LIKE ? OR
-            u.email LIKE ? OR
-            u.phone LIKE ?
+            u.first_name ILIKE ? OR
+            u.last_name ILIKE ? OR
+            u.name ILIKE ? OR
+            u.email ILIKE ? OR
+            u.phone ILIKE ?
         )";
         $term = '%' . $search . '%';
         array_push($params, $term, $term, $term, $term, $term);

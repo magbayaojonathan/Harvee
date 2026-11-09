@@ -28,20 +28,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['address'] ?? '');
-        
+
         // Validation
         $errors = [];
-        
+
         if (empty($name)) {
             $errors[] = "Name is required";
         }
-        
+
         if (empty($email)) {
             $errors[] = "Email is required";
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Invalid email format";
         }
-        
+
         // Check if email already exists (excluding current user)
         if ($email !== $user['email']) {
             $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
@@ -50,27 +50,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = "Email already exists";
             }
         }
-        
+
         if (empty($errors)) {
             try {
                 $stmt = $pdo->prepare("
-                    UPDATE users 
-                    SET name = ?, email = ?, phone = ?, address = ? 
+                    UPDATE users
+                    SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$name, $email, $phone, $address, $user_id]);
-                
+                $nameParts = preg_split('/\s+/', $name, 2);
+                $stmt->execute([$nameParts[0], $nameParts[1] ?? '', $email, $phone, $address, $user_id]);
+                $_SESSION['first_name'] = $nameParts[0];
+                $_SESSION['last_name'] = $nameParts[1] ?? '';
+
                 // Update session name
                 $_SESSION['name'] = $name;
-                
+
                 $message = "Profile updated successfully!";
                 $message_type = "success";
-                
+
                 // Refresh user data
                 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
                 $stmt->execute([$user_id]);
                 $user = $stmt->fetch();
-                
+
             } catch (PDOException $e) {
                 $message = "Error updating profile: " . $e->getMessage();
                 $message_type = "error";
@@ -80,37 +83,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = "error";
         }
     }
-    
+
     // Handle password change
     if (isset($_POST['change_password'])) {
         $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
         $confirm_password = $_POST['confirm_password'] ?? '';
-        
+
         $errors = [];
-        
+
         // Verify current password
         if (!password_verify($current_password, $user['password'])) {
             $errors[] = "Current password is incorrect";
         }
-        
+
         if (strlen($new_password) < 6) {
             $errors[] = "New password must be at least 6 characters";
         }
-        
+
         if ($new_password !== $confirm_password) {
             $errors[] = "New passwords do not match";
         }
-        
+
         if (empty($errors)) {
             try {
                 $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
                 $stmt->execute([$hashed_password, $user_id]);
-                
+
                 $message = "Password changed successfully!";
                 $message_type = "success";
-                
+
             } catch (PDOException $e) {
                 $message = "Error changing password: " . $e->getMessage();
                 $message_type = "error";
@@ -224,7 +227,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                         </div>
                         <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['name']); ?></h2>
                         <p class="text-green-100 text-sm mb-4">Member since <?php echo $member_since; ?></p>
-                        
+
                         <!-- Stats -->
                         <div class="grid grid-cols-3 gap-3 pt-4 border-t border-green-600">
                             <div>
@@ -241,7 +244,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Quick Links -->
                     <div class="bg-white p-4">
                         <h3 class="font-semibold text-gray-700 mb-3">Quick Actions</h3>
@@ -289,53 +292,53 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Edit Profile Information</h2>
                     </div>
-                    
+
                     <form method="POST" action="" class="p-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                                <input type="text" 
-                                       name="name" 
+                                <input type="text"
+                                       name="name"
                                        value="<?php echo htmlspecialchars($user['name']); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                                <input type="email" 
-                                       name="email" 
+                                <input type="email"
+                                       name="email"
                                        value="<?php echo htmlspecialchars($user['email']); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                                <input type="tel" 
-                                       name="phone" 
+                                <input type="tel"
+                                       name="phone"
                                        value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent">
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Member Since</label>
-                                <input type="text" 
+                                <input type="text"
                                        value="<?php echo $member_since; ?>"
                                        class="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-600"
                                        disabled>
                             </div>
-                            
+
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
-                                <textarea name="address" 
+                                <textarea name="address"
                                           rows="3"
                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"><?php echo htmlspecialchars($user['address'] ?? ''); ?></textarea>
                             </div>
                         </div>
-                        
+
                         <div class="mt-6">
-                            <button type="submit" 
+                            <button type="submit"
                                     name="update_profile"
                                     class="px-6 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                                 Update Profile
@@ -349,37 +352,37 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Change Password</h2>
                     </div>
-                    
+
                     <form method="POST" action="" class="p-6" onsubmit="return validatePasswordForm()">
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-                                <input type="password" 
-                                       name="current_password" 
+                                <input type="password"
+                                       name="current_password"
                                        id="current_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                                <input type="password" 
-                                       name="new_password" 
+                                <input type="password"
+                                       name="new_password"
                                        id="new_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                                 <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-                                <input type="password" 
-                                       name="confirm_password" 
+                                <input type="password"
+                                       name="confirm_password"
                                        id="confirm_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <!-- Password Strength Meter -->
                             <div class="hidden" id="password-strength">
                                 <div class="flex items-center mt-2">
@@ -390,9 +393,9 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="mt-6">
-                            <button type="submit" 
+                            <button type="submit"
                                     name="change_password"
                                     class="px-6 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                                 Change Password
@@ -406,24 +409,24 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Account Statistics</h2>
                     </div>
-                    
+
                     <div class="p-6">
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div class="stat-card bg-blue-50 p-4 rounded-lg">
                                 <div class="text-blue-600 text-2xl font-bold"><?php echo $stats['total_orders']; ?></div>
                                 <div class="text-sm text-gray-600">Total Orders</div>
                             </div>
-                            
+
                             <div class="stat-card bg-green-50 p-4 rounded-lg">
                                 <div class="text-green-600 text-2xl font-bold"><?php echo $stats['completed_orders']; ?></div>
                                 <div class="text-sm text-gray-600">Completed</div>
                             </div>
-                            
+
                             <div class="stat-card bg-yellow-50 p-4 rounded-lg">
                                 <div class="text-yellow-600 text-2xl font-bold"><?php echo $stats['pending_orders']; ?></div>
                                 <div class="text-sm text-gray-600">Pending</div>
                             </div>
-                            
+
                             <div class="stat-card bg-purple-50 p-4 rounded-lg">
                                 <div class="text-purple-600 text-2xl font-bold">₱<?php echo number_format($stats['total_spent'], 0); ?></div>
                                 <div class="text-sm text-gray-600">Total Spent</div>
@@ -440,38 +443,38 @@ $member_since = date('F Y', strtotime($user['created_at']));
         function validatePasswordForm() {
             const newPass = document.getElementById('new_password').value;
             const confirmPass = document.getElementById('confirm_password').value;
-            
+
             if (newPass.length < 6) {
                 alert('New password must be at least 6 characters long');
                 return false;
             }
-            
+
             if (newPass !== confirmPass) {
                 alert('New passwords do not match');
                 return false;
             }
-            
+
             return true;
         }
-        
+
         // Password strength meter
         document.getElementById('new_password')?.addEventListener('input', function() {
             const password = this.value;
             const strengthBar = document.getElementById('strength-bar');
             const strengthText = document.getElementById('strength-text');
             const strengthDiv = document.getElementById('password-strength');
-            
+
             if (password.length > 0) {
                 strengthDiv.classList.remove('hidden');
-                
+
                 let strength = 0;
                 if (password.length >= 6) strength += 25;
                 if (password.match(/[a-z]+/)) strength += 25;
                 if (password.match(/[A-Z]+/)) strength += 25;
                 if (password.match(/[0-9]+/)) strength += 25;
-                
+
                 strengthBar.style.width = strength + '%';
-                
+
                 if (strength < 50) {
                     strengthBar.className = 'h-full bg-red-500';
                     strengthText.textContent = 'Weak';
@@ -486,7 +489,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                 strengthDiv.classList.add('hidden');
             }
         });
-        
+
         // Auto-hide messages after 5 seconds
         setTimeout(function() {
             const messages = document.querySelectorAll('.bg-green-100, .bg-red-100');

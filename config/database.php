@@ -1,47 +1,37 @@
 <?php
 require_once __DIR__ . '/i18n.php';
 harvee_i18n_bootstrap();
-
-// Credentials are configured through the hosting environment.
-$defaultHost = 'localhost';
-$defaultPort = '3306';
-$defaultDbName = 'harvee_marketplace';
-$defaultDbUser = 'root';
-$defaultDbPass = '';
-$defaultCharset = 'utf8mb4';
-
-$host = getenv('DB_HOST') ?: $defaultHost;
-$port = getenv('DB_PORT') ?: $defaultPort;
-$dbname = getenv('DB_NAME') ?: $defaultDbName;
-$username = getenv('DB_USER') ?: $defaultDbUser;
-$password = getenv('DB_PASS') ?: $defaultDbPass;
-$charset = getenv('DB_CHARSET') ?: $defaultCharset;
-
-$dsn = "mysql:host={$host};port={$port};dbname={$dbname};charset={$charset}";
-
-$options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
-];
-
 try {
-    if (getenv('APP_ENV') === 'production') {
-        foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $key) {
-            if (getenv($key) === false || getenv($key) === '') {
-                throw new PDOException('Missing database configuration: ' . $key);
-            }
-        }
+    $url = getenv('DATABASE_URL');
+    $parts = $url ? parse_url($url) : [];
+    if ($url && (!$parts || !in_array($parts['scheme'] ?? '', ['postgres', 'postgresql'], true))) {
+        throw new RuntimeException('DATABASE_URL must be a PostgreSQL URL');
     }
-    if ($ca = getenv('DB_SSL_CA')) {
-        $options[PDO::MYSQL_ATTR_SSL_CA] = $ca;
-        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    $host = $parts['host'] ?? (getenv('DB_HOST') ?: 'localhost');
+    $port = $parts['port'] ?? (getenv('DB_PORT') ?: '5432');
+    $dbname = isset($parts['path']) ? rawurldecode(ltrim($parts['path'], '/')) : (getenv('DB_NAME') ?: 'harvee_marketplace');
+    $username = isset($parts['user']) ? rawurldecode($parts['user']) : (getenv('DB_USER') ?: 'postgres');
+    $password = isset($parts['pass']) ? rawurldecode($parts['pass']) : (getenv('DB_PASS') ?: '');
+    parse_str($parts['query'] ?? '', $query);
+    $sslmode = getenv('DB_SSLMODE') ?: ($query['sslmode'] ?? 'prefer');
+    if (!in_array($sslmode, ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'], true)) {
+        throw new RuntimeException('Invalid DB_SSLMODE');
     }
-    $pdo = new PDO($dsn, $username, $password, $options);
-} catch (PDOException $e) {
+    foreach ([$host, $port, $dbname] as $component) {
+        if (preg_match('/[;\s]/', (string)$component)) throw new RuntimeException('Invalid database connection component');
+    }
+    if (getenv('APP_ENV') === 'production' && !$url && (!getenv('DB_HOST') || !getenv('DB_USER') || !getenv('DB_NAME') || !getenv('DB_PASS'))) {
+        throw new RuntimeException('Configure DATABASE_URL or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS');
+    }
+    $pdo = new PDO("pgsql:host={$host};port={$port};dbname={$dbname};sslmode={$sslmode};connect_timeout=10", $username, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    $pdo->exec("SET TIME ZONE 'Asia/Manila'");
+} catch (Throwable $e) {
     error_log('Database connection failed: ' . $e->getMessage());
+    if (PHP_SAPI === 'cli') exit(1);
     http_response_code(503);
-    die(getenv('APP_DEBUG') === '1' && getenv('APP_ENV') !== 'production'
-        ? 'Database connection failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8')
-        : 'Service temporarily unavailable. Please try again later.');
+    exit('Service temporarily unavailable. Please try again later.');
 }

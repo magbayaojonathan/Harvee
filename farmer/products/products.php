@@ -16,13 +16,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Delete product
     if (isset($_POST['delete_product'])) {
         $product_id = $_POST['product_id'] ?? 0;
-        
+
         if ($product_id > 0) {
             try {
                 // Check if product belongs to this farmer
                 $check_stmt = $pdo->prepare("SELECT id FROM products WHERE id = ? AND farmer_id = ?");
                 $check_stmt->execute([$product_id, $user_id]);
-                
+
                 if ($check_stmt->fetch()) {
                     $delete_stmt = $pdo->prepare("DELETE FROM products WHERE id = ?");
                     $delete_stmt->execute([$product_id]);
@@ -35,18 +35,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-    
+
     // Update stock
     if (isset($_POST['update_stock'])) {
         $product_id = $_POST['product_id'] ?? 0;
         $new_stock = $_POST['stock'] ?? 0;
-        
+
         if ($product_id > 0 && is_numeric($new_stock) && $new_stock >= 0) {
             try {
                 // Check if product belongs to this farmer
                 $check_stmt = $pdo->prepare("SELECT id FROM products WHERE id = ? AND farmer_id = ?");
                 $check_stmt->execute([$product_id, $user_id]);
-                
+
                 if ($check_stmt->fetch()) {
                     $update_stmt = $pdo->prepare("UPDATE products SET stock_quantity = ? WHERE id = ?");
                     $update_stmt->execute([$new_stock, $product_id]);
@@ -59,18 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-    
+
     // Update price
     if (isset($_POST['update_price'])) {
         $product_id = $_POST['product_id'] ?? 0;
         $new_price = $_POST['price'] ?? 0;
-        
+
         if ($product_id > 0 && is_numeric($new_price) && $new_price > 0) {
             try {
                 // Check if product belongs to this farmer
                 $check_stmt = $pdo->prepare("SELECT id FROM products WHERE id = ? AND farmer_id = ?");
                 $check_stmt->execute([$product_id, $user_id]);
-                
+
                 if ($check_stmt->fetch()) {
                     $update_stmt = $pdo->prepare("UPDATE products SET price = ? WHERE id = ?");
                     $update_stmt->execute([$new_price, $product_id]);
@@ -92,14 +92,14 @@ $sort = $_GET['sort'] ?? 'newest';
 $stock_filter = $_GET['stock'] ?? '';
 
 // Build query with JOIN to get category name
-$sql = "SELECT p.*, c.name as category_name 
-        FROM products p 
-        LEFT JOIN categories c ON p.category_id = c.id 
+$sql = "SELECT p.*, c.name as category_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.farmer_id = ?";
 $params = [$user_id];
 
 if (!empty($search)) {
-    $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+    $sql .= " AND (p.name ILIKE ? OR p.description ILIKE ?)";
     $search_term = "%$search%";
     $params[] = $search_term;
     $params[] = $search_term;
@@ -243,13 +243,13 @@ try {
                         <span class="text-gray-700 font-medium ml-2">Manage Products</span>
                     </div>
                 </div>
-                
+
                 <!-- User Menu -->
                 <div class="flex items-center space-x-4">
                     <a href="add.php" class="px-4 py-2 bg-[#10854d] text-white rounded-lg hover:bg-[#0d6e40] transition-colors">
                         <i class="fas fa-plus mr-2"></i> Add New
                     </a>
-                    
+
                     <div class="relative group">
                         <button class="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100">
                             <div class="w-8 h-8 bg-[#10854d] rounded-full flex items-center justify-center">
@@ -264,7 +264,7 @@ try {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
-                        
+
                         <!-- Dropdown Menu -->
                         <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 hidden group-hover:block">
                             <a href="../dashboard.php" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
@@ -326,7 +326,7 @@ try {
                     </div>
                 </div>
             </div>
-            
+
             <div class="bg-white rounded-xl shadow-sm p-6">
                 <div class="flex items-center justify-between">
                     <div>
@@ -338,7 +338,7 @@ try {
                     </div>
                 </div>
             </div>
-            
+
             <div class="bg-white rounded-xl shadow-sm p-6">
                 <div class="flex items-center justify-between">
                     <div>
@@ -350,7 +350,7 @@ try {
                     </div>
                 </div>
             </div>
-            
+
             <div class="bg-white rounded-xl shadow-sm p-6">
                 <div class="flex items-center justify-between">
                     <div>
@@ -370,13 +370,13 @@ try {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <!-- Search -->
                     <div>
-                        <input type="text" 
-                               name="search" 
-                               placeholder="Search products..." 
+                        <input type="text"
+                               name="search"
+                               placeholder="Search products..."
                                value="<?php echo htmlspecialchars($search); ?>"
                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20">
                     </div>
-                    
+
                     <!-- Category Filter -->
                     <div>
                         <select name="category" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
@@ -388,7 +388,7 @@ try {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    
+
                     <!-- Stock Filter -->
                     <div>
                         <select name="stock" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
@@ -398,7 +398,7 @@ try {
                             <option value="out" <?php echo ($stock_filter == 'out') ? 'selected' : ''; ?>>Out of Stock</option>
                         </select>
                     </div>
-                    
+
                     <!-- Sort By -->
                     <div>
                         <select name="sort" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none">
@@ -412,14 +412,14 @@ try {
                         </select>
                     </div>
                 </div>
-                
+
                 <div class="flex justify-between">
-                    <button type="submit" 
+                    <button type="submit"
                             class="px-6 py-2 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                         Apply Filters
                     </button>
                     <?php if ($search || $category_filter || $stock_filter): ?>
-                        <a href="products.php" 
+                        <a href="products.php"
                            class="px-6 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
                             Clear Filters
                         </a>
@@ -441,13 +441,13 @@ try {
                     <h3 class="text-xl font-bold text-gray-700 mb-3">No products found</h3>
                     <p class="text-gray-500 mb-6 max-w-md mx-auto">
                         <?php if ($search || $category_filter || $stock_filter): ?>
-                            Try adjusting your filters or 
+                            Try adjusting your filters or
                             <a href="products.php" class="text-[#10854d] hover:underline">clear all filters</a>.
                         <?php else: ?>
                             You haven't added any products yet.
                         <?php endif; ?>
                     </p>
-                    <a href="add.php" 
+                    <a href="add.php"
                        class="inline-block px-6 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                         <i class="fas fa-plus mr-2"></i> Add Your First Product
                     </a>
@@ -466,11 +466,11 @@ try {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
-                            <?php foreach ($products as $product): 
+                            <?php foreach ($products as $product):
                                 $stock = $product['stock_quantity'] ?? 0;
                                 $stock_class = '';
                                 $stock_status = '';
-                                
+
                                 if ($stock == 0) {
                                     $stock_class = 'stock-out';
                                     $stock_status = 'Out of Stock';
@@ -503,7 +503,7 @@ try {
                                     </td>
                                     <td class="py-4 px-6">
                                         <span class="font-bold text-[#10854d]">₱<?php echo number_format($product['price'] ?? 0, 2); ?></span>
-                                        <button onclick="openEditPriceModal(<?php echo $product['id']; ?>, <?php echo $product['price'] ?? 0; ?>)" 
+                                        <button onclick="openEditPriceModal(<?php echo $product['id']; ?>, <?php echo $product['price'] ?? 0; ?>)"
                                                 class="ml-2 text-gray-400 hover:text-[#10854d] text-sm">
                                             <i class="fas fa-edit"></i>
                                         </button>
@@ -513,35 +513,35 @@ try {
                                             <span class="font-medium <?php echo $stock == 0 ? 'text-red-600' : ($stock < 10 ? 'text-yellow-600' : 'text-green-600'); ?>">
                                                 <?php echo $stock; ?>
                                             </span>
-                                            <button onclick="openEditStockModal(<?php echo $product['id']; ?>, <?php echo $stock; ?>)" 
+                                            <button onclick="openEditStockModal(<?php echo $product['id']; ?>, <?php echo $stock; ?>)"
                                                     class="ml-2 text-gray-400 hover:text-[#10854d] text-sm">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                         </div>
                                     </td>
                                     <td class="py-4 px-6">
-                                        <span class="px-3 py-1 text-xs rounded-full 
-                                            <?php echo $stock == 0 ? 'bg-red-100 text-red-800' : 
-                                                   ($stock < 10 ? 'bg-yellow-100 text-yellow-800' : 
+                                        <span class="px-3 py-1 text-xs rounded-full
+                                            <?php echo $stock == 0 ? 'bg-red-100 text-red-800' :
+                                                   ($stock < 10 ? 'bg-yellow-100 text-yellow-800' :
                                                    'bg-green-100 text-green-800'); ?>">
                                             <?php echo $stock_status; ?>
                                         </span>
                                     </td>
                                     <td class="py-4 px-6">
                                         <div class="flex items-center space-x-2">
-                                            <a href="#" 
-                                               onclick="openViewModal(<?php echo $product['id']; ?>)" 
+                                            <a href="#"
+                                               onclick="openViewModal(<?php echo $product['id']; ?>)"
                                                class="px-3 py-1 bg-blue-100 text-blue-600 text-xs font-medium rounded hover:bg-blue-200">
                                                 <i class="fas fa-eye mr-1"></i> View
                                             </a>
-                                            <a href="edit.php?id=<?php echo $product['id']; ?>" 
+                                            <a href="edit.php?id=<?php echo $product['id']; ?>"
                                                class="px-3 py-1 bg-yellow-100 text-yellow-600 text-xs font-medium rounded hover:bg-yellow-200">
                                                 <i class="fas fa-edit mr-1"></i> Edit
                                             </a>
                                             <form method="POST" action="" class="inline" onsubmit="return confirmDelete()">
                                                 <input type="hidden" name="product_id" value="<?php echo $product['id']; ?>">
-                                                <button type="submit" 
-                                                        name="delete_product" 
+                                                <button type="submit"
+                                                        name="delete_product"
                                                         class="px-3 py-1 bg-red-100 text-red-600 text-xs font-medium rounded hover:bg-red-200">
                                                     <i class="fas fa-trash mr-1"></i> Delete
                                                 </button>
@@ -553,7 +553,7 @@ try {
                         </tbody>
                     </table>
                 </div>
-                
+
                 <!-- Summary Footer -->
                 <div class="p-6 bg-gray-50 border-t border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-center">
@@ -568,7 +568,7 @@ try {
                                 <span class="text-gray-600">Total Stock Value:</span>
                                 <span class="font-bold text-[#10854d] ml-2">₱<?php echo number_format($total_stock_value, 2); ?></span>
                             </div>
-                            <a href="add.php" 
+                            <a href="add.php"
                                class="px-4 py-2 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                                 <i class="fas fa-plus mr-2"></i> Add New Product
                             </a>
@@ -609,21 +609,21 @@ try {
                     <div class="space-y-4">
                         <div>
                             <label class="block text-gray-700 font-medium mb-2">New Stock Quantity</label>
-                            <input type="number" 
-                                   name="stock" 
+                            <input type="number"
+                                   name="stock"
                                    id="stockInput"
                                    min="0"
                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20"
                                    required>
                         </div>
                         <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" 
-                                    onclick="closeModal('editStockModal')" 
+                            <button type="button"
+                                    onclick="closeModal('editStockModal')"
                                     class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                                 Cancel
                             </button>
-                            <button type="submit" 
-                                    name="update_stock" 
+                            <button type="submit"
+                                    name="update_stock"
                                     class="px-6 py-2 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40]">
                                 Update Stock
                             </button>
@@ -651,8 +651,8 @@ try {
                             <label class="block text-gray-700 font-medium mb-2">New Price (₱)</label>
                             <div class="relative">
                                 <span class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500">₱</span>
-                                <input type="number" 
-                                       name="price" 
+                                <input type="number"
+                                       name="price"
                                        id="priceInput"
                                        step="0.01"
                                        min="0.01"
@@ -661,13 +661,13 @@ try {
                             </div>
                         </div>
                         <div class="flex justify-end space-x-3 pt-4">
-                            <button type="button" 
-                                    onclick="closeModal('editPriceModal')" 
+                            <button type="button"
+                                    onclick="closeModal('editPriceModal')"
                                     class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                                 Cancel
                             </button>
-                            <button type="submit" 
-                                    name="update_price" 
+                            <button type="submit"
+                                    name="update_price"
                                     class="px-6 py-2 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40]">
                                 Update Price
                             </button>

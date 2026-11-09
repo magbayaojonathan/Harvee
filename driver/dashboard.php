@@ -184,7 +184,7 @@ try {
     $available_sql = "\n        SELECT o.id, o.order_number, o.order_status, o.created_at, o.shipping_name, o.shipping_phone, o.shipping_address,\n               u.first_name, u.last_name\n        FROM orders o\n        JOIN users u ON o.customer_id = u.id\n        WHERE o.delivery_driver_id IS NULL\n          AND o.order_status = 'confirmed'\n    ";
     $available_params = [];
     if ($search !== '') {
-        $available_sql .= " AND (o.order_number LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR o.shipping_name LIKE ? OR o.shipping_address LIKE ?)";
+        $available_sql .= " AND (o.order_number ILIKE ? OR u.first_name ILIKE ? OR u.last_name ILIKE ? OR o.shipping_name ILIKE ? OR o.shipping_address ILIKE ?)";
         $q = '%' . $search . '%';
         $available_params = [$q, $q, $q, $q, $q];
     }
@@ -197,7 +197,7 @@ try {
     $active_sql = "\n        SELECT o.id, o.order_number, o.order_status, o.created_at, o.shipping_name, o.shipping_phone, o.shipping_address,\n               u.first_name, u.last_name,\n               u.latitude AS customer_latitude, u.longitude AS customer_longitude, u.address AS customer_profile_address,\n               fu.id AS farmer_id, fu.first_name AS farmer_first_name, fu.last_name AS farmer_last_name,\n               fu.latitude AS farmer_latitude, fu.longitude AS farmer_longitude,\n               COALESCE(fp.business_address, fu.address) AS farmer_address\n        FROM orders o\n        JOIN users u ON o.customer_id = u.id\n        LEFT JOIN (\n            SELECT oi.order_id, MIN(oi.farmer_id) AS farmer_id\n            FROM order_items oi\n            GROUP BY oi.order_id\n        ) ofm ON ofm.order_id = o.id\n        LEFT JOIN users fu ON fu.id = ofm.farmer_id\n        LEFT JOIN farmer_profiles fp ON fp.user_id = fu.id\n        WHERE o.delivery_driver_id = ?\n          AND o.order_status IN ('processing', 'shipped', 'confirmed')\n    ";
     $active_params = [$driver_id];
     if ($search !== '') {
-        $active_sql .= " AND (o.order_number LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR o.shipping_name LIKE ? OR o.shipping_address LIKE ?)";
+        $active_sql .= " AND (o.order_number ILIKE ? OR u.first_name ILIKE ? OR u.last_name ILIKE ? OR o.shipping_name ILIKE ? OR o.shipping_address ILIKE ?)";
         $q = '%' . $search . '%';
         $active_params = [$driver_id, $q, $q, $q, $q, $q];
     }

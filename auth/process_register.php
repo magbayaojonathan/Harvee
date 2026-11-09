@@ -94,7 +94,7 @@ if (!empty($errors)) {
 try {
     // Begin transaction
     $pdo->beginTransaction();
-    
+
     // Check if email already exists
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->execute([$email]);
@@ -105,7 +105,7 @@ try {
         header('Location: register.php?step=1');
         exit;
     }
-    
+
     // Check if username already exists
     $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
     $stmt->execute([$username]);
@@ -116,19 +116,19 @@ try {
         header('Location: register.php?step=1');
         exit;
     }
-    
+
     // Hash password
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-    
+
     // Generate verification token (optional)
     $verification_token = bin2hex(random_bytes(32));
-    
+
     $has_latitude = false;
     $has_longitude = false;
     try {
-        $col_stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'latitude'");
+        $col_stmt = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'latitude'");
         $has_latitude = (bool)$col_stmt->fetch();
-        $col_stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'longitude'");
+        $col_stmt = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'longitude'");
         $has_longitude = (bool)$col_stmt->fetch();
     } catch (PDOException $e) {
         $has_latitude = false;
@@ -138,21 +138,21 @@ try {
     if ($has_latitude && $has_longitude) {
         $stmt = $pdo->prepare("
             INSERT INTO users (
-                first_name, 
-                last_name, 
-                username, 
-                email, 
-                password, 
-                phone, 
+                first_name,
+                last_name,
+                username,
+                email,
+                password,
+                phone,
                 address,
                 latitude,
                 longitude,
-                role, 
+                role,
                 email_verified,
                 verification_token,
                 is_active,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) RETURNING id
         ");
 
         $stmt->execute([
@@ -173,19 +173,19 @@ try {
     } else {
         $stmt = $pdo->prepare("
             INSERT INTO users (
-                first_name, 
-                last_name, 
-                username, 
-                email, 
-                password, 
-                phone, 
-                address, 
-                role, 
+                first_name,
+                last_name,
+                username,
+                email,
+                password,
+                phone,
+                address,
+                role,
                 email_verified,
                 verification_token,
                 is_active,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) RETURNING id
         ");
 
         $stmt->execute([
@@ -202,21 +202,21 @@ try {
             1
         ]);
     }
-    
-    $user_id = $pdo->lastInsertId();
-    
+
+    $user_id = $stmt->fetchColumn();
+
     // If user is a farmer, create farmer profile
     if ($role === 'farmer') {
         $stmt = $pdo->prepare("
             INSERT INTO farmer_profiles (
-                user_id, 
-                business_name, 
+                user_id,
+                business_name,
                 business_address,
                 business_phone,
                 created_at
             ) VALUES (?, ?, ?, ?, NOW())
         ");
-        
+
         $stmt->execute([
             $user_id,
             $farmName,
@@ -224,10 +224,10 @@ try {
             $phone
         ]);
     }
-    
+
     // Commit transaction
     $pdo->commit();
-    
+
     // Clear form data and make sure the new account is not auto-logged in.
     unset($_SESSION['form_data']);
     unset(
@@ -246,16 +246,16 @@ try {
 
     header('Location: login.php?registered=1&role=' . urlencode($role));
     exit();
-    
+
 } catch (PDOException $e) {
     // Rollback transaction on error
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    
+
     // Log error
     error_log("Registration error: " . $e->getMessage());
-    
+
     // User-friendly error message
     $_SESSION['register_errors'] = ['Registration failed. Please try again later.'];
     $_SESSION['form_data'] = $formData;
@@ -267,7 +267,7 @@ try {
 function sendVerificationEmail($email, $token) {
     $subject = "Verify Your Harvee Account";
     $verification_link = "http://" . $_SERVER['HTTP_HOST'] . "/auth/verify-email.php?token=" . $token;
-    
+
     $message = "
     <html>
     <head>
@@ -281,11 +281,11 @@ function sendVerificationEmail($email, $token) {
     </body>
     </html>
     ";
-    
+
     $headers = "MIME-Version: 1.0" . "\r\n";
     $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
     $headers .= "From: noreply@harvee.com" . "\r\n";
-    
+
     // Uncomment to actually send email
     // mail($email, $subject, $message, $headers);
 }

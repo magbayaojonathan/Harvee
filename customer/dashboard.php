@@ -28,56 +28,56 @@ try {
     $cartStmt = $pdo->prepare("SELECT COALESCE(SUM(quantity), 0) as total FROM cart WHERE user_id = ?");
     $cartStmt->execute([$user_id]);
     $cart_count = $cartStmt->fetch()['total'] ?? 0;
-    
+
     // Get order count and total spent
     $orderStmt = $pdo->prepare("SELECT COUNT(*) as total, COALESCE(SUM(total), 0) as spent FROM orders WHERE customer_id = ?");
     $orderStmt->execute([$user_id]);
     $orderData = $orderStmt->fetch();
     $order_count = $orderData['total'] ?? 0;
     $total_spent = $orderData['spent'] ?? 0;
-    
+
     // Get pending orders count
     $pendingStmt = $pdo->prepare("SELECT COUNT(*) as total FROM orders WHERE customer_id = ? AND order_status = 'pending'");
     $pendingStmt->execute([$user_id]);
     $pending_orders = $pendingStmt->fetch()['total'] ?? 0;
-    
+
     // Get wishlist count
     $wishlistStmt = $pdo->prepare("SELECT COUNT(*) as total FROM wishlist WHERE user_id = ?");
     $wishlistStmt->execute([$user_id]);
     $wishlist_count = $wishlistStmt->fetch()['total'] ?? 0;
-    
+
     // Get recent orders with items
     $recentStmt = $pdo->prepare("
-        SELECT o.*, 
+        SELECT o.*,
                COUNT(oi.id) as item_count,
                u.first_name as seller_name
-        FROM orders o 
-        LEFT JOIN order_items oi ON o.id = oi.order_id 
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN users u ON o.customer_id = u.id
-        WHERE o.customer_id = ? 
-        GROUP BY o.id 
-        ORDER BY o.created_at DESC 
+        WHERE o.customer_id = ?
+        GROUP BY o.id, u.id
+        ORDER BY o.created_at DESC
         LIMIT 5
     ");
     $recentStmt->execute([$user_id]);
     $recent_orders = $recentStmt->fetchAll();
-    
+
     // Get recommended products based on past orders
     $recommendedStmt = $pdo->prepare("
-        SELECT p.*, 
+        SELECT p.*,
                u.first_name as seller_name,
                AVG(r.rating) as avg_rating
-        FROM products p 
+        FROM products p
         LEFT JOIN users u ON p.farmer_id = u.id
         LEFT JOIN reviews r ON p.id = r.product_id
-        WHERE p.is_active = TRUE 
-        GROUP BY p.id 
-        ORDER BY RAND() 
+        WHERE p.is_active = 1
+        GROUP BY p.id, u.id
+        ORDER BY RANDOM()
         LIMIT 4
     ");
     $recommendedStmt->execute();
     $recommended_products = $recommendedStmt->fetchAll();
-    
+
 } catch (PDOException $e) {
     // Tables might not exist yet
     $recommended_products = [];
@@ -115,7 +115,7 @@ try {
             position: relative;
             overflow: hidden;
         }
-        
+
         .welcome-banner {
             background: linear-gradient(135deg, #10854d 0%, #0d6e40 50%, #059669 100%);
             position: relative;
@@ -154,7 +154,7 @@ try {
         .status-shipped { background: #e0f2fe; color: #0369a1; }
         .status-delivered { background: #dcfce7; color: #166534; }
         .status-cancelled { background: #fee2e2; color: #991b1b; }
-        
+
         /* Main navigation styling */
         .main-nav a {
             transition: all 0.3s ease;
@@ -182,7 +182,7 @@ try {
                     <img src="../assets/images/logo.png" alt="Harvee Logo" class="w-8 h-8 object-contain">
                     <span class="text-xl font-bold gradient-text">Harvee</span>
                 </a>
-                
+
                 <!-- Main Navigation Links -->
                 <div class="hidden md:flex items-center space-x-8 main-nav">
                     <a href="dashboard.php" class="text-gray-700 font-medium hover:text-[#10854d] transition-colors <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
@@ -222,7 +222,7 @@ try {
                             </span>
                             <i class="fas fa-chevron-down text-xs text-gray-500"></i>
                         </button>
-                        
+
                         <!-- Dropdown Menu - Profile & Logout -->
                         <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100">
                             <div class="px-4 py-3 border-b border-gray-100">
@@ -255,7 +255,7 @@ try {
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div>
                         <h1 class="text-3xl md:text-4xl font-bold mb-2">
-                            Welcome back, <?php echo htmlspecialchars($first_name); ?>! 
+                            Welcome back, <?php echo htmlspecialchars($first_name); ?>!
                         </h1>
                         <p class="text-white/90 text-lg max-w-2xl">
                             Your farming marketplace for fresh, quality products. Here's what's happening with your account today.
@@ -333,7 +333,7 @@ try {
                             View All <i class="fas fa-arrow-right ml-1 text-xs"></i>
                         </a>
                     </div>
-                    
+
                     <?php if (empty($recent_orders)): ?>
                         <div class="text-center py-12">
                             <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -384,7 +384,7 @@ try {
                         </h2>
                         <a href="browse.php" class="text-sm text-[#10854d] hover:underline">View More</a>
                     </div>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <?php foreach ($recommended_products as $product): ?>
                             <a href="product.php?id=<?php echo $product['id']; ?>" class="product-card bg-gray-50 rounded-xl p-4 hover:bg-gray-100 transition-all">
@@ -424,13 +424,13 @@ try {
                         <i class="fas fa-bolt text-[#10854d] mr-2"></i>
                         Quick Actions
                     </h2>
-                    
+
                     <div class="grid grid-cols-2 gap-3">
                         <a href="browse.php" class="p-4 bg-green-50 rounded-xl text-center hover:bg-green-100 transition-all group">
                             <i class="fas fa-search text-2xl text-green-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Browse</span>
                         </a>
-                        
+
                         <a href="cart.php" class="p-4 bg-blue-50 rounded-xl text-center hover:bg-blue-100 transition-all group">
                             <i class="fas fa-shopping-cart text-2xl text-blue-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Cart</span>
@@ -438,12 +438,12 @@ try {
                                 <span class="text-xs text-blue-600 font-semibold"><?php echo $cart_count; ?> items</span>
                             <?php endif; ?>
                         </a>
-                        
+
                         <a href="orders.php" class="p-4 bg-purple-50 rounded-xl text-center hover:bg-purple-100 transition-all group">
                             <i class="fas fa-truck text-2xl text-purple-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Track</span>
                         </a>
-                        
+
                         <a href="wishlist.php" class="p-4 bg-pink-50 rounded-xl text-center hover:bg-pink-100 transition-all group">
                             <i class="fas fa-heart text-2xl text-pink-600 mb-2 group-hover:scale-110 transition-transform"></i>
                             <span class="block text-sm font-medium text-gray-700">Wishlist</span>
@@ -460,7 +460,7 @@ try {
                         <i class="fas fa-tags text-[#10854d] mr-2"></i>
                         Shop by Category
                     </h2>
-                    
+
                     <div class="space-y-2">
                         <a href="browse.php?category=Vegetables" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-green-50 transition-all group">
                             <div class="flex items-center space-x-3">
@@ -471,7 +471,7 @@ try {
                             </div>
                             <i class="fas fa-chevron-right text-gray-400 text-sm group-hover:text-green-600"></i>
                         </a>
-                        
+
                         <a href="browse.php?category=Fruits" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-orange-50 transition-all group">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -481,7 +481,7 @@ try {
                             </div>
                             <i class="fas fa-chevron-right text-gray-400 text-sm group-hover:text-orange-600"></i>
                         </a>
-                        
+
                         <a href="browse.php?category=Grains" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-yellow-50 transition-all group">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -491,8 +491,8 @@ try {
                             </div>
                             <i class="fas fa-chevron-right text-gray-400 text-sm group-hover:text-yellow-600"></i>
                         </a>
-                        
-                        
+
+
                         <a href="browse.php?category=Dairy" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-all group">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">

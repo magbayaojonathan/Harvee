@@ -1,16 +1,17 @@
 # Deploy HARVEE to Render
 
-The repository includes a PHP/Apache Docker service and `render.yaml`. Node/Firebase is not required by the PHP runtime.
+The repository includes PostgreSQL support and a PHP/Apache Docker service and `render.yaml`. Node/Firebase is not required by the PHP runtime.
 
 ## Setup
 
-1. Provision a MySQL 8 compatible database reachable from Render. Render managed PostgreSQL is incompatible with this application. Create a dedicated database/user and arrange backups.
-2. Import `database/harvee_marketplace_all_in_one.sql` into the selected database using your provider's SQL client. Do not import the legacy trigger migrations alongside it. Back up existing installations first; this script is not a complete migration system.
-3. Rotate the database password previously committed in `config/database.php`. Removing it from current source does not remove it from Git history.
-4. Push the repository, then choose **New > Blueprint** in Render and select this repository.
-5. Supply `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`, and the correct `DB_PORT`. Keep `APP_ENV=production` and `APP_DEBUG=0`.
-6. For providers requiring verified MySQL TLS, add the provider CA as a Render secret file and set `DB_SSL_CA` to its absolute path (for example `/etc/secrets/mysql-ca.pem`).
-7. Deploy. `/health.php` returns 200 only when the database and essential schema columns are accessible. Import the schema before deploying.
+1. Push the repository, then choose **New > Blueprint** in Render and select this repository.
+2. The Blueprint creates a paid managed PostgreSQL 17 database and connects it using its internal `DATABASE_URL`. Both services use Singapore.
+3. Deploy. Startup runs `php deploy/migrate.php`, which imports `database/postgresql.sql` once and records the migration. Later restarts skip the applied migration. The health check verifies essential tables.
+4. For an existing PostgreSQL database, set `DATABASE_URL` to that database and back up first. The initializer targets fresh installations; it is not a MySQL data converter or an upgrade of an arbitrary existing schema.
+5. Existing MySQL records are not copied automatically. Export and transform them separately, preserve foreign-key IDs, and reset PostgreSQL identity sequences after import before accepting new writes.
+6. Rotate the database password previously committed in this repository; deleting it from source does not remove it from Git history.
+
+Use only `database/postgresql.sql`. The other SQL files are retained as legacy MySQL references and must not be imported into PostgreSQL.
 
 The Blueprint uses a paid Starter service and a 1 GB persistent disk mounted at `/var/data`. Review/delivery uploads and sessions persist there. Startup links `assets/uploads` to that disk. This setup supports one instance; horizontal scaling needs shared storage/sessions. Render files outside the disk are ephemeral.
 
@@ -26,7 +27,7 @@ Apache listens on Render's PORT (default 10000). Render supplies HTTPS; secure s
 - Verify totals, shipping recipient/address, stock deduction and confirmation.
 - Confirm as farmer, claim/dispatch/deliver as driver and upload proof.
 - Rate a delivered order with an image; redeploy and verify uploaded images persist.
-- Requests to `/database/harvee_marketplace_all_in_one.sql`, `/config/database.php`, `/.git/config`, `/deploy/start.sh` return 403/404.
+- Requests to `/database/postgresql.sql`, `/config/database.php`, `/.git/config`, `/deploy/start.sh` return 403/404.
 - Address remaining items in `FUNCTIONALITY_AUDIT.md` before accepting real orders.
 
 ## Local Docker verification
@@ -35,6 +36,12 @@ Build: `docker build -t harvee .`
 
 Run: `docker run --rm -p 10000:10000 --env-file .env -v harvee-data:/var/data harvee`
 
-Create a private `.env` with reachable database credentials first. Health checks work over HTTP; authentication needs HTTPS because container session cookies are secure.
+Create a private `.env` with a reachable PostgreSQL DATABASE_URL first. Health checks work over HTTP; authentication needs HTTPS because container session cookies are secure.
 
-References: https://render.com/docs/blueprint-spec and https://render.com/docs/disks
+References: https://render.com/docs/blueprint-spec, https://render.com/docs/disks, https://render.com/docs/postgresql-creating-connecting
+
+## Automated PostgreSQL checks
+
+Run `npm --prefix tests install`, then `npm --prefix tests test`. The tests use PGlite (PostgreSQL compiled to WebAssembly), import the schema twice, plan static PHP SQL statements, and exercise generated IDs/names, addresses, cart checkout, inventory, and case-insensitive search. They do not exercise PHP/PDO, dynamically assembled queries, concurrent checkout or the Render container.
+
+PostgreSQL flag fields use constrained SMALLINT values 0/1 to match existing PHP forms. JSON payload fields remain serialized JSON text to preserve existing PHP decoding and image checks. Enum values use CHECK constraints. Updated timestamps are maintained with PostgreSQL triggers.

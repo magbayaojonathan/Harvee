@@ -1,8 +1,17 @@
+databases:
+  - name: harvee-db
+    databaseName: harvee_marketplace
+    user: harvee
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "17"
+    ipAllowList: []
 services:
   - type: web
     name: harvee
     runtime: docker
     plan: starter
+    region: singapore
     healthCheckPath: /health.php
     disk:
       name: harvee-storage
@@ -13,13 +22,7 @@ services:
         value: production
       - key: APP_DEBUG
         value: "0"
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        value: "3306"
-      - key: DB_NAME
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASS
-        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: harvee-db
+          property: connectionString

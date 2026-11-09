@@ -30,24 +30,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['address'] ?? '');
-        
+
         // Validation
         $errors = [];
-        
+
         if (empty($first_name)) {
             $errors[] = "First name is required";
         }
-        
+
         if (empty($last_name)) {
             $errors[] = "Last name is required";
         }
-        
+
         if (empty($email)) {
             $errors[] = "Email is required";
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Invalid email format";
         }
-        
+
         // Check if email already exists (excluding current user)
         if ($email !== $user['email']) {
             $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
@@ -56,29 +56,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = "Email already exists";
             }
         }
-        
+
         if (empty($errors)) {
             try {
                 $stmt = $pdo->prepare("
-                    UPDATE users 
-                    SET first_name = ?, last_name = ?, name = ?, email = ?, phone = ?, address = ? 
+                    UPDATE users
+                    SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$first_name, $last_name, $name, $email, $phone, $address, $user_id]);
-                
+                $stmt->execute([$first_name, $last_name, $email, $phone, $address, $user_id]);
+
                 // Update session
                 $_SESSION['first_name'] = $first_name;
                 $_SESSION['last_name'] = $last_name;
                 $_SESSION['name'] = $name;
-                
+
                 $message = "Profile updated successfully!";
                 $message_type = "success";
-                
+
                 // Refresh user data
                 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
                 $stmt->execute([$user_id]);
                 $user = $stmt->fetch();
-                
+
             } catch (PDOException $e) {
                 $message = "Error updating profile: " . $e->getMessage();
                 $message_type = "error";
@@ -88,37 +88,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = "error";
         }
     }
-    
+
     // Handle password change
     if (isset($_POST['change_password'])) {
         $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
         $confirm_password = $_POST['confirm_password'] ?? '';
-        
+
         $errors = [];
-        
+
         // Verify current password
         if (!password_verify($current_password, $user['password'])) {
             $errors[] = "Current password is incorrect";
         }
-        
+
         if (strlen($new_password) < 6) {
             $errors[] = "New password must be at least 6 characters";
         }
-        
+
         if ($new_password !== $confirm_password) {
             $errors[] = "New passwords do not match";
         }
-        
+
         if (empty($errors)) {
             try {
                 $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
                 $stmt->execute([$hashed_password, $user_id]);
-                
+
                 $message = "Password changed successfully!";
                 $message_type = "success";
-                
+
             } catch (PDOException $e) {
                 $message = "Error changing password: " . $e->getMessage();
                 $message_type = "error";
@@ -140,8 +140,8 @@ $stats['total_products'] = $stmt->fetch()['total'] ?? 0;
 
 // Total orders received (through their products)
 $stmt = $pdo->prepare("
-    SELECT COUNT(DISTINCT oi.order_id) as total 
-    FROM order_items oi 
+    SELECT COUNT(DISTINCT oi.order_id) as total
+    FROM order_items oi
     WHERE oi.farmer_id = ?
 ");
 $stmt->execute([$user_id]);
@@ -149,8 +149,8 @@ $stats['total_orders'] = $stmt->fetch()['total'] ?? 0;
 
 // Total revenue - FIXED: using unit_price and total_price
 $stmt = $pdo->prepare("
-    SELECT SUM(oi.total_price) as total 
-    FROM order_items oi 
+    SELECT SUM(oi.total_price) as total
+    FROM order_items oi
     WHERE oi.farmer_id = ?
 ");
 $stmt->execute([$user_id]);
@@ -158,8 +158,8 @@ $stats['total_revenue'] = $stmt->fetch()['total'] ?? 0;
 
 // Pending orders - FIXED: using order_status column
 $stmt = $pdo->prepare("
-    SELECT COUNT(DISTINCT oi.order_id) as total 
-    FROM order_items oi 
+    SELECT COUNT(DISTINCT oi.order_id) as total
+    FROM order_items oi
     JOIN orders o ON oi.order_id = o.id
     WHERE oi.farmer_id = ? AND o.order_status = 'pending'
 ");
@@ -168,8 +168,8 @@ $stats['pending_orders'] = $stmt->fetch()['total'] ?? 0;
 
 // Low stock products (less than 10 items) - FIXED: using stock_quantity
 $stmt = $pdo->prepare("
-    SELECT COUNT(*) as total 
-    FROM products 
+    SELECT COUNT(*) as total
+    FROM products
     WHERE farmer_id = ? AND stock_quantity < 10
 ");
 $stmt->execute([$user_id]);
@@ -177,10 +177,10 @@ $stats['low_stock'] = $stmt->fetch()['total'] ?? 0;
 
 // Get recent products - FIXED: using correct column names
 $stmt = $pdo->prepare("
-    SELECT id, name, price, stock_quantity, created_at 
-    FROM products 
-    WHERE farmer_id = ? 
-    ORDER BY created_at DESC 
+    SELECT id, name, price, stock_quantity, created_at
+    FROM products
+    WHERE farmer_id = ?
+    ORDER BY created_at DESC
     LIMIT 5
 ");
 $stmt->execute([$user_id]);
@@ -301,7 +301,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                         <h2 class="text-xl font-bold mb-1"><?php echo htmlspecialchars($user['first_name'] ?? $user['name'] ?? 'Farmer'); ?></h2>
                         <p class="text-green-100 text-sm mb-2">Farmer</p>
                         <p class="text-green-100 text-sm mb-4">Member since <?php echo $member_since; ?></p>
-                        
+
                         <!-- Farm Stats -->
                         <div class="grid grid-cols-2 gap-3 pt-4 border-t border-green-600">
                             <div>
@@ -314,7 +314,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Quick Links -->
                     <div class="bg-white p-4">
                         <h3 class="font-semibold text-gray-700 mb-3">Farm Management</h3>
@@ -361,54 +361,54 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Farm Information</h2>
                     </div>
-                    
+
                     <form method="POST" action="" class="p-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-                                <input type="text" 
-                                       name="first_name" 
+                                <input type="text"
+                                       name="first_name"
                                        value="<?php echo htmlspecialchars($user['first_name'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-                                <input type="text" 
-                                       name="last_name" 
+                                <input type="text"
+                                       name="last_name"
                                        value="<?php echo htmlspecialchars($user['last_name'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                                <input type="email" 
-                                       name="email" 
+                                <input type="email"
+                                       name="email"
                                        value="<?php echo htmlspecialchars($user['email']); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                                <input type="tel" 
-                                       name="phone" 
+                                <input type="tel"
+                                       name="phone"
                                        value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent">
                             </div>
-                            
+
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Farm Address</label>
-                                <textarea name="address" 
+                                <textarea name="address"
                                           rows="2"
                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"><?php echo htmlspecialchars($user['address'] ?? ''); ?></textarea>
                             </div>
                         </div>
-                        
+
                         <div class="mt-6">
-                            <button type="submit" 
+                            <button type="submit"
                                     name="update_profile"
                                     class="px-6 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                                 Update Farm Profile
@@ -422,40 +422,40 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Change Password</h2>
                     </div>
-                    
+
                     <form method="POST" action="" class="p-6" onsubmit="return validatePasswordForm()">
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-                                <input type="password" 
-                                       name="current_password" 
+                                <input type="password"
+                                       name="current_password"
                                        id="current_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                                <input type="password" 
-                                       name="new_password" 
+                                <input type="password"
+                                       name="new_password"
                                        id="new_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                                 <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
                             </div>
-                            
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-                                <input type="password" 
-                                       name="confirm_password" 
+                                <input type="password"
+                                       name="confirm_password"
                                        id="confirm_password"
                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#10854d] focus:border-transparent"
                                        required>
                             </div>
                         </div>
-                        
+
                         <div class="mt-6">
-                            <button type="submit" 
+                            <button type="submit"
                                     name="change_password"
                                     class="px-6 py-3 bg-[#10854d] text-white font-medium rounded-lg hover:bg-[#0d6e40] transition-colors">
                                 Change Password
@@ -469,24 +469,24 @@ $member_since = date('F Y', strtotime($user['created_at']));
                     <div class="px-6 py-4 bg-gray-50 border-b">
                         <h2 class="text-lg font-bold text-gray-800">Farm Statistics</h2>
                     </div>
-                    
+
                     <div class="p-6">
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             <div class="stat-card bg-blue-50 p-4 rounded-lg">
                                 <div class="text-blue-600 text-2xl font-bold"><?php echo $stats['total_products']; ?></div>
                                 <div class="text-sm text-gray-600">Total Products</div>
                             </div>
-                            
+
                             <div class="stat-card bg-green-50 p-4 rounded-lg">
                                 <div class="text-green-600 text-2xl font-bold"><?php echo $stats['total_orders']; ?></div>
                                 <div class="text-sm text-gray-600">Orders Received</div>
                             </div>
-                            
+
                             <div class="stat-card bg-yellow-50 p-4 rounded-lg">
                                 <div class="text-yellow-600 text-2xl font-bold"><?php echo $stats['pending_orders']; ?></div>
                                 <div class="text-sm text-gray-600">Pending Orders</div>
                             </div>
-                            
+
                             <div class="stat-card bg-red-50 p-4 rounded-lg">
                                 <div class="text-red-600 text-2xl font-bold"><?php echo $stats['low_stock']; ?></div>
                                 <div class="text-sm text-gray-600">Low Stock Items</div>
@@ -537,7 +537,7 @@ $member_since = date('F Y', strtotime($user['created_at']));
                                                 <?php echo htmlspecialchars($order['product_name']); ?> × <?php echo $order['quantity']; ?>
                                             </p>
                                             <p class="text-xs text-gray-500">
-                                                Customer: <?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?> • 
+                                                Customer: <?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?> •
                                                 <?php echo date('M j, Y', strtotime($order['created_at'])); ?>
                                             </p>
                                         </div>
@@ -561,20 +561,20 @@ $member_since = date('F Y', strtotime($user['created_at']));
         function validatePasswordForm() {
             const newPass = document.getElementById('new_password').value;
             const confirmPass = document.getElementById('confirm_password').value;
-            
+
             if (newPass.length < 6) {
                 alert('New password must be at least 6 characters long');
                 return false;
             }
-            
+
             if (newPass !== confirmPass) {
                 alert('New passwords do not match');
                 return false;
             }
-            
+
             return true;
         }
-        
+
         // Auto-hide messages after 5 seconds
         setTimeout(function() {
             const messages = document.querySelectorAll('.bg-green-100, .bg-red-100');

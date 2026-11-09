@@ -6,7 +6,7 @@ Static review, November 9, 2026. Deployment configuration is prepared; marketpla
 
 - Checkout omitted required order subtotal and shipping address fields. It now saves subtotal/total and snapshots the customer's default shipping recipient, address, phone and instructions. Customers must save a shipping address first.
 - Checkout locks cart/product rows during the transaction and rejects nonpositive quantities to reduce concurrent overselling.
-- Removed hardcoded hosting credentials and host-header-based credential selection. Production requires explicit credentials, returns 503 on database failures, and hides error details. Optional verified MySQL TLS is supported.
+- Removed hardcoded hosting credentials and host-header-based credential selection. Production requires explicit credentials, returns 503 on database failures, and hides error details. PostgreSQL SSL policy is configurable with DB_SSLMODE.
 - Successful login regenerates the session ID.
 - Added the missing password-help route with an availability message and disabled unimplemented social login buttons.
 - Marked GCash and bank transfer unavailable; checkout uses cash on delivery.
@@ -27,4 +27,10 @@ Static review, November 9, 2026. Deployment configuration is prepared; marketpla
 
 ## Validation limits
 
-PHP syntax was checked locally. Local MySQL was unreachable because the server was stopped. Docker is not installed, so container build and live Render deployment were not tested. Complete the smoke checklist in `DEPLOY_ONLINE.md` with a configured database before public launch.
+PHP syntax and PostgreSQL schema/query checks were run locally with PGlite. The schema imports twice successfully. PGlite validation does not replace live PHP/PDO integration tests. Docker is not installed, so container build and live Render deployment were not tested. Complete the smoke checklist in `DEPLOY_ONLINE.md` with a configured database before public launch.
+
+## PostgreSQL conversion
+
+The runtime now requires PDO PostgreSQL. Render provisions managed PostgreSQL and supplies DATABASE_URL. Startup initializes the new schema once. Static query planning exposed and fixed generated-name updates in customer/farmer profiles and settings. The product editor now uses name, category_id and stock_quantity. Legacy MySQL SQL files are reference only; existing MySQL data is not migrated automatically.
+
+Validation: schema imported twice, 170 static statements planned, database smoke checks passed, and all 41 PHP files passed syntax checks. Live PHP/PDO and Render container tests remain outstanding.

@@ -37,11 +37,11 @@ try {
     $cartStmt->execute([$user_id]);
     $cart_count = (int)$cartStmt->fetchColumn();
 
-    $tableCheck = $pdo->query("SHOW TABLES LIKE 'addresses'");
+    $tableCheck = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'addresses'");
     $address_table_exists = (bool)$tableCheck->fetchColumn();
     if ($address_table_exists) {
-        $latCheck = $pdo->query("SHOW COLUMNS FROM addresses LIKE 'latitude'");
-        $lngCheck = $pdo->query("SHOW COLUMNS FROM addresses LIKE 'longitude'");
+        $latCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'addresses' AND column_name = 'latitude'");
+        $lngCheck = $pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'addresses' AND column_name = 'longitude'");
         $address_has_coordinates = (bool)$latCheck->fetch() && (bool)$lngCheck->fetch();
     }
 } catch (PDOException $e) {

@@ -19,20 +19,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['add_to_cart']) || isset($_POST['product_id'])) {
         $product_id = (int)($_POST['product_id'] ?? 0);
         $quantity = (int)($_POST['quantity'] ?? 1);
-        
+
         if ($product_id > 0 && $quantity > 0) {
             // Check if product exists and is in stock
             $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
             $stmt->execute([$product_id]);
             $product = $stmt->fetch();
-            
+
             if ($product) {
                 if ($product['stock_quantity'] >= $quantity) {
                     // Check if item already in cart
                     $stmt = $pdo->prepare("SELECT * FROM cart WHERE user_id = ? AND product_id = ?");
                     $stmt->execute([$user_id, $product_id]);
                     $existing_item = $stmt->fetch();
-                    
+
                     if ($existing_item) {
                         // Update quantity
                         $new_quantity = $existing_item['quantity'] + $quantity;
@@ -57,14 +57,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-    
+
     // Update Cart Quantities
     if (isset($_POST['update_cart'])) {
         if (isset($_POST['quantities']) && is_array($_POST['quantities'])) {
             foreach ($_POST['quantities'] as $cart_id => $quantity) {
                 $cart_id = (int)$cart_id;
                 $quantity = (int)$quantity;
-                
+
                 if ($quantity <= 0) {
                     // Remove item if quantity is 0 or less
                     $stmt = $pdo->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
@@ -72,14 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     // Check stock availability
                     $stmt = $pdo->prepare("
-                        SELECT p.stock_quantity as stock 
-                        FROM cart c 
-                        JOIN products p ON c.product_id = p.id 
+                        SELECT p.stock_quantity as stock
+                        FROM cart c
+                        JOIN products p ON c.product_id = p.id
                         WHERE c.id = ? AND c.user_id = ?
                     ");
                     $stmt->execute([$cart_id, $user_id]);
                     $item = $stmt->fetch();
-                    
+
                     if ($item && $quantity <= $item['stock']) {
                         // Update quantity in cart
                         $stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?");
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Cart updated successfully!";
         }
     }
-    
+
     // Remove Single Item
     if (isset($_POST['remove_item'])) {
         $cart_id = $_POST['cart_id'] ?? 0;
@@ -100,41 +100,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Item removed from cart!";
         }
     }
-    
+
     // Clear Entire Cart
     if (isset($_POST['clear_cart'])) {
         $stmt = $pdo->prepare("DELETE FROM cart WHERE user_id = ?");
         $stmt->execute([$user_id]);
         $message = "Cart cleared!";
     }
-    
+
     // Checkout
     if (isset($_POST['checkout'])) {
         try {
             $pdo->beginTransaction();
-            
+
             // Get cart items with product details
             $stmt = $pdo->prepare("
                 SELECT c.*, p.name as product_name, p.price, p.stock_quantity as stock, p.farmer_id
-                FROM cart c 
-                JOIN products p ON c.product_id = p.id 
+                FROM cart c
+                JOIN products p ON c.product_id = p.id
                 WHERE c.user_id = ?
                 ORDER BY p.id FOR UPDATE
             ");
             $stmt->execute([$user_id]);
             $cart_items_checkout = $stmt->fetchAll();
-            
+
             if (empty($cart_items_checkout)) {
                 throw new Exception("Your cart is empty!");
             }
-            
+
             // Check stock availability
             foreach ($cart_items_checkout as $item) {
                 if ($item['quantity'] < 1 || $item['quantity'] > $item['stock']) {
                     throw new Exception("'{$item['product_name']}' is out of stock! Available: {$item['stock']}");
                 }
             }
-            
+
             // Calculate total
             $order_total = 0;
             foreach ($cart_items_checkout as $item) {
@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($order_number === null) {
                 throw new Exception("Unable to generate a unique order number. Please try again.");
             }
-            
+
             // Snapshot the customer's default shipping address onto the order.
             $addressStmt = $pdo->prepare("SELECT * FROM addresses WHERE user_id = ? AND address_type = 'shipping' ORDER BY is_default DESC, id DESC LIMIT 1");
             $addressStmt->execute([$user_id]);
@@ -169,49 +169,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ], static fn($value) => $value !== null && $value !== ''));
 
             // Create order
-            $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, subtotal, total, shipping_address, shipping_name, shipping_phone, delivery_notes, payment_method, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending')");
+            $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, subtotal, total, shipping_address, shipping_name, shipping_phone, delivery_notes, payment_method, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending') RETURNING id");
             $stmt->execute([$order_number, $user_id, $order_total, $order_total, $shippingAddress, $shipping['recipient_name'], $shipping['phone'], $shipping['delivery_instructions']]);
-            $order_id = $pdo->lastInsertId();
-            
+            $order_id = $stmt->fetchColumn();
+
             // Create order items and update stock
             foreach ($cart_items_checkout as $item) {
                 // Add to order items
                 $stmt = $pdo->prepare("
-                    INSERT INTO order_items 
-                    (order_id, product_id, farmer_id, product_name, quantity, unit_price, total_price) 
+                    INSERT INTO order_items
+                    (order_id, product_id, farmer_id, product_name, quantity, unit_price, total_price)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
-                
+
                 $stmt->execute([
-                    $order_id, 
-                    $item['product_id'], 
+                    $order_id,
+                    $item['product_id'],
                     $item['farmer_id'],
                     $item['product_name'],
-                    $item['quantity'], 
+                    $item['quantity'],
                     $item['price'],
                     $item['quantity'] * $item['price']
                 ]);
-                
+
                 // Update product stock
                 $stmt = $pdo->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?");
                 $stmt->execute([$item['quantity'], $item['product_id']]);
             }
-            
+
             // Clear cart
             $stmt = $pdo->prepare("DELETE FROM cart WHERE user_id = ?");
             $stmt->execute([$user_id]);
-            
+
             $pdo->commit();
-            
+
             // Store order info in session for confirmation
             $_SESSION['order_success'] = true;
             $_SESSION['order_id'] = $order_id;
             $_SESSION['order_total'] = $order_total;
-            
+
             // Redirect to order confirmation
             header('Location: order_confirmation.php');
             exit();
-            
+
         } catch (Exception $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $message = "Checkout failed: " . $e->getMessage();
@@ -223,20 +223,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 try {
     error_log("=== CART.PHP DEBUG ===");
     error_log("User ID: " . $user_id);
-    
+
     // First, check if there are any cart items at all
     $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM cart WHERE user_id = ?");
     $check_stmt->execute([$user_id]);
     $count = $check_stmt->fetchColumn();
-    
+
     error_log("Cart count for user $user_id: $count");
-    
+
     if ($count == 0) {
         error_log("Cart is empty for user $user_id");
         $cart_items = [];
     } else {
         error_log("Retrieving $count items from cart...");
-        
+
         $stmt = $pdo->prepare("
             SELECT c.id as cart_id,
                    c.quantity,
@@ -256,13 +256,13 @@ try {
         ");
         $stmt->execute([$user_id]);
         $cart_items = $stmt->fetchAll();
-        
+
         error_log("Retrieved " . count($cart_items) . " items");
         foreach ($cart_items as $idx => $item) {
             error_log("  Item $idx: product_id={$item['product_id']}, name={$item['product_name']}, qty={$item['quantity']}");
         }
     }
-    
+
 } catch (PDOException $e) {
     error_log("Cart query error: " . $e->getMessage());
     error_log("Error code: " . $e->getCode());
@@ -410,16 +410,16 @@ foreach ($cart_items as $item) {
                             <div class="p-6 border-b">
                                 <div class="flex justify-between items-center">
                                     <h2 class="text-xl font-bold text-gray-800">Your Items (<?php echo count($cart_items); ?>)</h2>
-                                    <button type="submit" 
-                                            name="update_cart" 
+                                    <button type="submit"
+                                            name="update_cart"
                                             class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-full hover:bg-gray-200 transition-colors">
                                         Update Cart
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <div class="divide-y divide-gray-100">
-                                <?php foreach ($cart_items as $index => $item): 
+                                <?php foreach ($cart_items as $index => $item):
                                     $item_total = $item['quantity'] * $item['unit_price'];
                                     $is_low_stock = $item['stock'] < 5;
                                     $max_quantity = min($item['stock'], 20);
@@ -434,7 +434,7 @@ foreach ($cart_items as $item) {
                                                     </svg>
                                                 </div>
                                             </div>
-                                            
+
                                             <!-- Product Details -->
                                             <div class="md:w-3/4">
                                                 <div class="flex justify-between">
@@ -446,10 +446,10 @@ foreach ($cart_items as $item) {
                                                             <?php echo htmlspecialchars($item['description'] ?? 'No description available'); ?>
                                                         </p>
                                                         <div class="text-sm text-gray-600 mb-3">
-                                                            <span class="font-medium">Farmer:</span> 
+                                                            <span class="font-medium">Farmer:</span>
                                                             <?php echo htmlspecialchars($item['farmer_first'] . ' ' . $item['farmer_last']); ?>
                                                         </div>
-                                                        
+
                                                         <!-- Stock Status -->
                                                         <div class="flex items-center gap-4 mb-4">
                                                             <div class="flex items-center">
@@ -474,7 +474,7 @@ foreach ($cart_items as $item) {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    
+
                                                     <!-- Price -->
                                                     <div class="text-right">
                                                         <div class="text-xl font-bold text-[#10854d] mb-2">
@@ -483,12 +483,12 @@ foreach ($cart_items as $item) {
                                                         <div class="text-sm text-gray-500">per item</div>
                                                     </div>
                                                 </div>
-                                                
+
                                                 <!-- Quantity Controls -->
                                                 <div class="flex items-center justify-between mt-4">
                                                     <div class="flex items-center">
                                                         <div class="flex items-center border border-gray-300 rounded-lg">
-                                                            <button type="button" 
+                                                            <button type="button"
                                                                     class="quantity-btn decrement rounded-l-lg"
                                                                     data-cart-id="<?php echo $item['cart_id']; ?>"
                                                                     onclick="updateQuantity(<?php echo $item['cart_id']; ?>, -1)">
@@ -496,17 +496,17 @@ foreach ($cart_items as $item) {
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
                                                                 </svg>
                                                             </button>
-                                                            <input type="number" 
-                                                                   name="quantities[<?php echo $item['cart_id']; ?>]" 
-                                                                   value="<?php echo $item['quantity']; ?>" 
-                                                                   min="1" 
+                                                            <input type="number"
+                                                                   name="quantities[<?php echo $item['cart_id']; ?>]"
+                                                                   value="<?php echo $item['quantity']; ?>"
+                                                                   min="1"
                                                                    max="<?php echo $max_quantity; ?>"
                                                                    data-unit-price="<?php echo htmlspecialchars((string)$item['unit_price']); ?>"
                                                                    class="quantity-input border-0 focus:ring-2 focus:ring-[#10854d]"
                                                                    oninput="recalculateCartSummary()"
                                                                    onchange="validateQuantity(this, <?php echo $max_quantity; ?>)"
                                                                    data-cart-id="<?php echo $item['cart_id']; ?>">
-                                                            <button type="button" 
+                                                            <button type="button"
                                                                     class="quantity-btn increment rounded-r-lg"
                                                                     data-cart-id="<?php echo $item['cart_id']; ?>"
                                                                     onclick="updateQuantity(<?php echo $item['cart_id']; ?>, 1)">
@@ -516,18 +516,18 @@ foreach ($cart_items as $item) {
                                                             </button>
                                                         </div>
                                                         <span class="ml-4 text-gray-500 text-sm">
-                                                            × <?php echo $item['quantity']; ?> = 
+                                                            × <?php echo $item['quantity']; ?> =
                                                             <span class="font-bold text-gray-700">
                                                                 ₱<?php echo number_format($item_total, 2); ?>
                                                             </span>
                                                         </span>
                                                     </div>
-                                                    
+
                                                     <!-- Remove Button -->
                                                     <form method="POST" action="" class="inline">
                                                         <input type="hidden" name="cart_id" value="<?php echo $item['cart_id']; ?>">
-                                                        <button type="submit" 
-                                                                name="remove_item" 
+                                                        <button type="submit"
+                                                                name="remove_item"
                                                                 onclick="return confirm('Remove this item from cart?')"
                                                                 class="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 transition-colors">
                                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -541,7 +541,7 @@ foreach ($cart_items as $item) {
                                     </div>
                                 <?php endforeach; ?>
                             </div>
-                            
+
                             <!-- Cart Actions -->
                             <div class="p-6 bg-gray-50 border-t">
                                 <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -549,11 +549,11 @@ foreach ($cart_items as $item) {
                                         Prices and availability are subject to change
                                     </div>
                                     <div class="flex gap-3">
-                                        <a href="browse.php" 
+                                        <a href="browse.php"
                                            class="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-full hover:bg-gray-300 transition-colors">
                                             Continue Shopping
                                         </a>
-                                        <button type="button" 
+                                        <button type="button"
                                                 onclick="clearCart()"
                                                 class="px-6 py-3 bg-red-100 text-red-600 font-medium rounded-full hover:bg-red-200 transition-colors">
                                             Clear Cart
@@ -565,7 +565,7 @@ foreach ($cart_items as $item) {
                     </div>
                 <?php endif; ?>
             </div>
-            
+
             <!-- Order Summary Sidebar -->
             <?php if (!empty($cart_items)): ?>
                 <div class="lg:w-1/3">
@@ -573,7 +573,7 @@ foreach ($cart_items as $item) {
                         <!-- Order Summary Card -->
                         <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
                             <h2 class="text-xl font-bold text-gray-800 mb-6">Order Summary</h2>
-                            
+
                             <!-- Items List -->
                             <div class="space-y-3 mb-6">
                                 <?php foreach ($cart_items as $item): ?>
@@ -592,7 +592,7 @@ foreach ($cart_items as $item) {
                                     </div>
                                 <?php endforeach; ?>
                             </div>
-                            
+
                             <!-- Calculations -->
                             <div class="space-y-3 border-t border-gray-200 pt-4 mb-6">
                                 <div class="flex justify-between">
@@ -609,7 +609,7 @@ foreach ($cart_items as $item) {
                                     <span class="text-gray-600">Service Fee</span>
                                     <span class="font-medium">₱10.00</span>
                                 </div>
-                                
+
                                 <!-- Shipping Notice -->
                                 <?php if ($total_amount < 1000): ?>
                                     <div class="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
@@ -631,7 +631,7 @@ foreach ($cart_items as $item) {
                                     </div>
                                 <?php endif; ?>
                             </div>
-                            
+
                             <!-- Total -->
                             <div class="border-t border-gray-200 pt-4 mb-6">
                                 <div class="flex justify-between items-center">
@@ -646,12 +646,12 @@ foreach ($cart_items as $item) {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <!-- Checkout Button -->
                             <p class="text-sm text-gray-600 mb-3">Cash on delivery. Ships to your default <a class="underline" href="addresses.php">shipping address</a>.</p>
                             <form method="POST" action="" id="checkoutForm">
-                                <button type="submit" 
-                                        name="checkout" 
+                                <button type="submit"
+                                        name="checkout"
                                         class="w-full py-4 bg-[#10854d] text-white font-bold rounded-full text-lg hover:bg-[#0d6e40] transition-colors shadow-lg flex items-center justify-center"
                                         onclick="return confirmCheckout()">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -660,7 +660,7 @@ foreach ($cart_items as $item) {
                                     Proceed to Checkout
                                 </button>
                             </form>
-                            
+
                             <!-- Secure Checkout Notice -->
                             <div class="mt-4 text-center">
                                 <div class="flex items-center justify-center text-sm text-gray-500 mb-2">
@@ -674,7 +674,7 @@ foreach ($cart_items as $item) {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- Payment Methods -->
                         <div class="bg-white rounded-xl shadow-sm p-6">
                             <h3 class="font-bold text-gray-700 mb-4">Accepted Payment Methods</h3>
@@ -785,25 +785,25 @@ foreach ($cart_items as $item) {
             }
             recalculateCartSummary();
         }
-        
+
         // Clear cart confirmation
         function clearCart() {
             if (confirm('Are you sure you want to clear your entire cart?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '';
-                
+
                 const input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = 'clear_cart';
                 input.value = '1';
-                
+
                 form.appendChild(input);
                 document.body.appendChild(form);
                 form.submit();
             }
         }
-        
+
         // Checkout confirmation
         function confirmCheckout() {
             return confirm('Proceed to checkout?\n\nYou will be redirected to complete your order.');

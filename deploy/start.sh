@@ -13,4 +13,5 @@ if [ ! -L /var/www/html/assets/uploads ]; then
     fi
     ln -s /var/data/uploads /var/www/html/assets/uploads
 fi
+php /var/www/html/deploy/migrate.php
 exec apache2-foreground
