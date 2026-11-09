@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/i18n.php';
+harvee_i18n_bootstrap();
+
 // Environment-first configuration with host-aware defaults.
 $httpHost = $_SERVER['HTTP_HOST'] ?? '';
 $isInfinityFreeHost =

@@ -527,7 +527,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="min-h-screen w-full flex items-center justify-center p-4 bg-cover bg-center bg-no-repeat bg-fixed" 
-         style="background-image: url('../assets/images/farm.jpg');">
+         style="background-image: url('../assets/images/Farm.jpg');">
         <div class="absolute inset-0 bg-gray-900/30"></div>
 
         <div class="relative z-10 w-full max-w-5xl flex flex-col md:flex-row items-center gap-6 md:gap-8">

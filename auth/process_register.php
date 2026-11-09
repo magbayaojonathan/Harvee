@@ -24,6 +24,7 @@ $role = $formData['role'] ?? 'customer';
 
 // Create full name from first and last name
 $fullName = $firstName . ' ' . $lastName;
+$farmerBusinessAddress = $address !== '' ? $address : 'To be updated';
 
 // Validate input again (security measure)
 $errors = [];
@@ -139,7 +140,6 @@ try {
             INSERT INTO users (
                 first_name, 
                 last_name, 
-                name, 
                 username, 
                 email, 
                 password, 
@@ -152,13 +152,12 @@ try {
                 verification_token,
                 is_active,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
 
         $stmt->execute([
             $firstName,
             $lastName,
-            $fullName,
             $username,
             $email,
             $hashed_password,
@@ -176,7 +175,6 @@ try {
             INSERT INTO users (
                 first_name, 
                 last_name, 
-                name, 
                 username, 
                 email, 
                 password, 
@@ -187,13 +185,12 @@ try {
                 verification_token,
                 is_active,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
 
         $stmt->execute([
             $firstName,
             $lastName,
-            $fullName,
             $username,
             $email,
             $hashed_password,
@@ -223,7 +220,7 @@ try {
         $stmt->execute([
             $user_id,
             $farmName,
-            $address,
+            $farmerBusinessAddress,
             $phone
         ]);
     }
@@ -231,30 +228,23 @@ try {
     // Commit transaction
     $pdo->commit();
     
-    // Set session variables (auto-login after registration)
-    $_SESSION['user_id'] = $user_id;
-    $_SESSION['first_name'] = $firstName;
-    $_SESSION['last_name'] = $lastName;
-    $_SESSION['name'] = $fullName;
-    $_SESSION['username'] = $username;
-    $_SESSION['email'] = $email;
-    $_SESSION['role'] = $role;
-    $_SESSION['logged_in'] = true;
-    
-    // Clear form data
+    // Clear form data and make sure the new account is not auto-logged in.
     unset($_SESSION['form_data']);
-    
+    unset(
+        $_SESSION['user_id'],
+        $_SESSION['first_name'],
+        $_SESSION['last_name'],
+        $_SESSION['name'],
+        $_SESSION['username'],
+        $_SESSION['email'],
+        $_SESSION['role'],
+        $_SESSION['logged_in']
+    );
+
     // Send verification email (optional)
     // sendVerificationEmail($email, $verification_token);
-    
-    // Redirect based on role
-    if ($role === 'farmer') {
-        header('Location: ../farmer/dashboard.php?welcome=1');
-    } elseif ($role === 'driver') {
-        header('Location: ../driver/dashboard.php?welcome=1');
-    } else {
-        header('Location: ../customer/dashboard.php?welcome=1');
-    }
+
+    header('Location: login.php?registered=1&role=' . urlencode($role));
     exit();
     
 } catch (PDOException $e) {
@@ -269,7 +259,7 @@ try {
     // User-friendly error message
     $_SESSION['register_errors'] = ['Registration failed. Please try again later.'];
     $_SESSION['form_data'] = $formData;
-    header('Location: register.php?step=3');
+    header('Location: register.php?step=2');
     exit();
 }
 

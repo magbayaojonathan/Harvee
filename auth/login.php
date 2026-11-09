@@ -5,6 +5,8 @@ require_once '../config/database.php';
 $errors = [];
 $success = false;
 $registered = isset($_GET['registered']) ? true : false;
+$requestedRole = strtolower(trim($_GET['role'] ?? ($_POST['role'] ?? 'customer')));
+$selectedRole = in_array($requestedRole, ['customer', 'farmer', 'driver'], true) ? $requestedRole : 'customer';
 
 // Check for remember me cookie
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_user'])) {
@@ -15,7 +17,7 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_user'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    $role = $_POST['role'] ?? 'customer';
+    $role = $_POST['role'] ?? $selectedRole;
     $remember = isset($_POST['remember']);
 
     if (!in_array($role, ['customer', 'farmer', 'driver'], true)) {
@@ -231,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <!-- Main container with background -->
     <div class="relative min-h-screen w-full flex items-center justify-center p-4" 
-         style="background: url('../assets/images/farm.jpg') center/cover no-repeat fixed;">
+         style="background: url('../assets/images/Farm.jpg') center/cover no-repeat fixed;">
         
         <!-- Fixed gradient overlay -->
         <div class="fixed inset-0 bg-gradient-to-b from-black/30 via-black/15 to-black/30 backdrop-blur-[1px] pointer-events-none"></div>
@@ -318,23 +320,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <!-- Role Selection - Enhanced Dropdown (compact) -->
                         <div class="relative" id="roleDropdown">
                             <select name="role" id="roleSelect" class="hidden">
-                                <option value="customer" <?php echo (($_POST['role'] ?? 'customer') === 'customer') ? 'selected' : ''; ?>>Customer</option>
-                                <option value="farmer" <?php echo (($_POST['role'] ?? 'customer') === 'farmer') ? 'selected' : ''; ?>>Farmer</option>
-                                <option value="driver" <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? 'selected' : ''; ?>>Driver</option>
+                                <option value="customer" <?php echo ($selectedRole === 'customer') ? 'selected' : ''; ?>>Customer</option>
+                                <option value="farmer" <?php echo ($selectedRole === 'farmer') ? 'selected' : ''; ?>>Farmer</option>
+                                <option value="driver" <?php echo ($selectedRole === 'driver') ? 'selected' : ''; ?>>Driver</option>
                             </select>
                             
                             <button type="button" id="dropdownButton"
                                     class="w-full py-2.5 px-4 rounded-full border border-gray-300 bg-white focus:border-[#10854d] focus:outline-none focus:ring-2 focus:ring-[#10854d]/20 flex items-center justify-between transition-all duration-200 text-sm">
                                 <div class="flex items-center gap-2 ml-6">
                                     <i data-lucide="user" class="absolute left-4 text-gray-400 w-4 h-4"></i>
-                                    <span id="selectedRoleText" class="text-gray-700"><?php echo ucfirst($_POST['role'] ?? 'Customer'); ?></span>
+                                    <span id="selectedRoleText" class="text-gray-700"><?php echo ucfirst($selectedRole); ?></span>
                                 </div>
                                 <i data-lucide="chevron-down" id="dropdownIcon" class="text-gray-400 w-4 h-4 transition-transform duration-200"></i>
                             </button>
                             
                             <div id="dropdownMenu" 
                                  class="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hidden opacity-0 translate-y-1 transition-all duration-200">
-                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo (($_POST['role'] ?? 'customer') === 'customer') ? 'bg-green-50' : ''; ?>"
+                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo ($selectedRole === 'customer') ? 'bg-green-50' : ''; ?>"
                                         data-value="customer">
                                     <div class="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
                                         <i data-lucide="shopping-bag" class="w-3.5 h-3.5 text-[#10854d]"></i>
@@ -343,10 +345,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <div class="font-medium text-gray-800 text-sm">Customer</div>
                                         <div class="text-xs text-gray-500">Browse and buy fresh products</div>
                                     </div>
-                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo (($_POST['role'] ?? 'customer') === 'customer') ? '' : 'hidden'; ?> check-icon"></i>
+                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo ($selectedRole === 'customer') ? '' : 'hidden'; ?> check-icon"></i>
                                 </button>
                                 <div class="border-t border-gray-100"></div>
-                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo (($_POST['role'] ?? 'customer') === 'farmer') ? 'bg-green-50' : ''; ?>"
+                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo ($selectedRole === 'farmer') ? 'bg-green-50' : ''; ?>"
                                         data-value="farmer">
                                     <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
                                         <i data-lucide="tractor" class="w-3.5 h-3.5 text-amber-600"></i>
@@ -355,10 +357,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <div class="font-medium text-gray-800 text-sm">Farmer</div>
                                         <div class="text-xs text-gray-500">Sell your farm products</div>
                                     </div>
-                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo (($_POST['role'] ?? 'customer') === 'farmer') ? '' : 'hidden'; ?> check-icon"></i>
+                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo ($selectedRole === 'farmer') ? '' : 'hidden'; ?> check-icon"></i>
                                 </button>
                                 <div class="border-t border-gray-100"></div>
-                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? 'bg-green-50' : ''; ?>"
+                                <button type="button" class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors role-option <?php echo ($selectedRole === 'driver') ? 'bg-green-50' : ''; ?>"
                                         data-value="driver">
                                     <div class="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center">
                                         <i data-lucide="truck" class="w-3.5 h-3.5 text-sky-600"></i>
@@ -367,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <div class="font-medium text-gray-800 text-sm">Driver</div>
                                         <div class="text-xs text-gray-500">Deliver and confirm drop-offs</div>
                                     </div>
-                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo (($_POST['role'] ?? 'customer') === 'driver') ? '' : 'hidden'; ?> check-icon"></i>
+                                    <i data-lucide="check" class="w-4 h-4 text-[#10854d] <?php echo ($selectedRole === 'driver') ? '' : 'hidden'; ?> check-icon"></i>
                                 </button>
                             </div>
                         </div>
