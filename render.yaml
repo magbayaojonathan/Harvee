@@ -2,7 +2,7 @@ databases:
   - name: harvee-db
     databaseName: harvee_marketplace
     user: harvee
-    plan: basic-256mb
+    plan: free
     region: singapore
     postgresMajorVersion: "17"
     ipAllowList: []
@@ -10,13 +10,9 @@ services:
   - type: web
     name: harvee
     runtime: docker
-    plan: starter
+    plan: free
     region: singapore
     healthCheckPath: /health.php
-    disk:
-      name: harvee-storage
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: APP_ENV
         value: production

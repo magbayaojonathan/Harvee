@@ -5,7 +5,7 @@ The repository includes PostgreSQL support and a PHP/Apache Docker service and `
 ## Setup
 
 1. Push the repository, then choose **New > Blueprint** in Render and select this repository.
-2. The Blueprint creates a paid managed PostgreSQL 17 database and connects it using its internal `DATABASE_URL`. Both services use Singapore.
+2. The Blueprint creates a free managed PostgreSQL 17 database and connects it using its internal `DATABASE_URL`. Both services use Singapore.
 3. Deploy. Startup runs `php deploy/migrate.php`, which imports `database/postgresql.sql` once and records the migration. Later restarts skip the applied migration. The health check verifies essential tables.
 4. For an existing PostgreSQL database, set `DATABASE_URL` to that database and back up first. The initializer targets fresh installations; it is not a MySQL data converter or an upgrade of an arbitrary existing schema.
 5. Existing MySQL records are not copied automatically. Export and transform them separately, preserve foreign-key IDs, and reset PostgreSQL identity sequences after import before accepting new writes.
@@ -13,7 +13,11 @@ The repository includes PostgreSQL support and a PHP/Apache Docker service and `
 
 Use only `database/postgresql.sql`. The other SQL files are retained as legacy MySQL references and must not be imported into PostgreSQL.
 
-The Blueprint uses a paid Starter service and a 1 GB persistent disk mounted at `/var/data`. Review/delivery uploads and sessions persist there. Startup links `assets/uploads` to that disk. This setup supports one instance; horizontal scaling needs shared storage/sessions. Render files outside the disk are ephemeral.
+The Blueprint uses only a **Free web service and Free PostgreSQL database**, with no paid disk or other paid resources. `/var/data` is a temporary runtime directory. Uploads and PHP sessions are lost on redeploy, restart or idle spin-down; users need to log in again and uploaded review/delivery images may stop loading. Durable image uploads require separately configured external storage; none is configured here.
+
+Render's free web service sleeps after 15 minutes without traffic and takes about a minute to wake up. Free PostgreSQL has a 1 GB limit and expires 30 days after creation. Export data before expiry; this is a demo/testing deployment. Do not assume the database is permanent. Only one free PostgreSQL database can be active per workspace.
+
+Service plans are free, but Render separately meters bandwidth/build usage. For strict zero spending, do not enable paid upgrades and review the workspace's payment/spend settings; a YAML file cannot cap account-level charges. Without a payment method, exceeding the included allowances can suspend services or builds.
 
 Apache listens on Render's PORT (default 10000). Render supplies HTTPS; secure session cookies require HTTPS. Internal SQL, config, logs, dotfiles and deployment files are denied by Apache. Uploaded PHP scripts cannot execute.
 
@@ -26,7 +30,7 @@ Apache listens on Render's PORT (default 10000). Render supplies HTTPS; secure s
 - Create a farmer product and customer shipping address, add to cart, and place a COD order.
 - Verify totals, shipping recipient/address, stock deduction and confirmation.
 - Confirm as farmer, claim/dispatch/deliver as driver and upload proof.
-- Rate a delivered order with an image; redeploy and verify uploaded images persist.
+- Rate a delivered order with an image. Expect that image and the login session to disappear after a redeploy/restart on the free service; verify PostgreSQL order records remain until database expiry.
 - Requests to `/database/postgresql.sql`, `/config/database.php`, `/.git/config`, `/deploy/start.sh` return 403/404.
 - Address remaining items in `FUNCTIONALITY_AUDIT.md` before accepting real orders.
 
@@ -34,11 +38,11 @@ Apache listens on Render's PORT (default 10000). Render supplies HTTPS; secure s
 
 Build: `docker build -t harvee .`
 
-Run: `docker run --rm -p 10000:10000 --env-file .env -v harvee-data:/var/data harvee`
+Run: `docker run --rm -p 10000:10000 --env-file .env harvee`
 
 Create a private `.env` with a reachable PostgreSQL DATABASE_URL first. Health checks work over HTTP; authentication needs HTTPS because container session cookies are secure.
 
-References: https://render.com/docs/blueprint-spec, https://render.com/docs/disks, https://render.com/docs/postgresql-creating-connecting
+References: https://render.com/docs/blueprint-spec, https://render.com/docs/free, https://render.com/docs/postgresql-creating-connecting
 
 ## Automated PostgreSQL checks
 
