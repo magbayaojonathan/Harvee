@@ -43,23 +43,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($errors)) {
-            $update_stmt = $pdo->prepare("
-                UPDATE users
-                SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, updated_at = NOW()
-                WHERE id = ?
-            ");
-            $update_stmt->execute([$first_name, $last_name, $email, $phone, $address, $user_id]);
+            try {
+                $pdo->beginTransaction();
+                $update_stmt = $pdo->prepare("
+                    UPDATE users
+                    SET latitude = CASE WHEN address IS DISTINCT FROM ? THEN NULL ELSE latitude END,
+                            longitude = CASE WHEN address IS DISTINCT FROM ? THEN NULL ELSE longitude END,
+                            first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $update_stmt->execute([$address, $address, $first_name, $last_name, $email, $phone, $address, $user_id]);
+                $pickup_stmt = $pdo->prepare("UPDATE farmer_profiles SET business_address = ? WHERE user_id = ?");
+                $pickup_stmt->execute([$address, $user_id]);
+                $pdo->commit();
 
-            $_SESSION['first_name'] = $first_name;
-            $_SESSION['last_name'] = $last_name;
-            $_SESSION['name'] = $name;
-            $_SESSION['email'] = $email;
+                $_SESSION['first_name'] = $first_name;
+                $_SESSION['last_name'] = $last_name;
+                $_SESSION['name'] = $name;
+                $_SESSION['email'] = $email;
 
-            $message = 'Account settings updated successfully.';
-            $message_type = 'success';
+                $message = 'Account settings updated successfully.';
+                $message_type = 'success';
 
-            $user_stmt->execute([$user_id]);
-            $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+                $user_stmt->execute([$user_id]);
+                $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $message = 'Unable to update account. Please try again.';
+                $message_type = 'error';
+            }
         } else {
             $message = implode(' ', $errors);
             $message_type = 'error';

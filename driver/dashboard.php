@@ -263,6 +263,7 @@ try {
 
                 <div class="flex items-center gap-3">
                     <span class="text-gray-600 text-sm hidden md:inline">Signed in as <span class="font-semibold"><?php echo htmlspecialchars($driver_name); ?></span></span>
+                    <a href="profile.php" class="px-3 py-2 text-sm text-[#10854d] hover:bg-green-50 rounded-lg">Profile</a>
                     <a href="../auth/logout.php" class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
                         <i class="fas fa-sign-out-alt mr-1"></i> Logout
                     </a>

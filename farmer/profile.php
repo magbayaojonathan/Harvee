@@ -59,12 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             try {
+                $pdo->beginTransaction();
                 $stmt = $pdo->prepare("
                     UPDATE users
-                    SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?
+                    SET latitude = CASE WHEN address IS DISTINCT FROM ? THEN NULL ELSE latitude END,
+                        longitude = CASE WHEN address IS DISTINCT FROM ? THEN NULL ELSE longitude END,
+                        first_name = ?, last_name = ?, email = ?, phone = ?, address = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$first_name, $last_name, $email, $phone, $address, $user_id]);
+                $stmt->execute([$address, $address, $first_name, $last_name, $email, $phone, $address, $user_id]);
+                $pickup_stmt = $pdo->prepare("UPDATE farmer_profiles SET business_address = ? WHERE user_id = ?");
+                $pickup_stmt->execute([$address, $user_id]);
+                $pdo->commit();
 
                 // Update session
                 $_SESSION['first_name'] = $first_name;
@@ -80,7 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user = $stmt->fetch();
 
             } catch (PDOException $e) {
-                $message = "Error updating profile: " . $e->getMessage();
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $message = "Unable to update profile. Please try again.";
                 $message_type = "error";
             }
         } else {
