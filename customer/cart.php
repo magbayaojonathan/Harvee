@@ -119,6 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 FROM cart c 
                 JOIN products p ON c.product_id = p.id 
                 WHERE c.user_id = ?
+                ORDER BY p.id FOR UPDATE
             ");
             $stmt->execute([$user_id]);
             $cart_items_checkout = $stmt->fetchAll();
@@ -129,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Check stock availability
             foreach ($cart_items_checkout as $item) {
-                if ($item['quantity'] > $item['stock']) {
+                if ($item['quantity'] < 1 || $item['quantity'] > $item['stock']) {
                     throw new Exception("'{$item['product_name']}' is out of stock! Available: {$item['stock']}");
                 }
             }
@@ -155,9 +156,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception("Unable to generate a unique order number. Please try again.");
             }
             
+            // Snapshot the customer's default shipping address onto the order.
+            $addressStmt = $pdo->prepare("SELECT * FROM addresses WHERE user_id = ? AND address_type = 'shipping' ORDER BY is_default DESC, id DESC LIMIT 1");
+            $addressStmt->execute([$user_id]);
+            $shipping = $addressStmt->fetch();
+            if (!$shipping) {
+                throw new RuntimeException('Please save a shipping address in My Addresses before checkout.');
+            }
+            $shippingAddress = implode(', ', array_filter([
+                $shipping['address_line1'], $shipping['address_line2'], $shipping['barangay'],
+                $shipping['city'], $shipping['province'], $shipping['postal_code'], $shipping['country']
+            ], static fn($value) => $value !== null && $value !== ''));
+
             // Create order
-            $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, total, order_status) VALUES (?, ?, ?, 'pending')");
-            $stmt->execute([$order_number, $user_id, $order_total]);
+            $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, subtotal, total, shipping_address, shipping_name, shipping_phone, delivery_notes, payment_method, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cash_on_delivery', 'pending')");
+            $stmt->execute([$order_number, $user_id, $order_total, $order_total, $shippingAddress, $shipping['recipient_name'], $shipping['phone'], $shipping['delivery_instructions']]);
             $order_id = $pdo->lastInsertId();
             
             // Create order items and update stock
@@ -200,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
             
         } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $message = "Checkout failed: " . $e->getMessage();
         }
     }
@@ -635,6 +648,7 @@ foreach ($cart_items as $item) {
                             </div>
                             
                             <!-- Checkout Button -->
+                            <p class="text-sm text-gray-600 mb-3">Cash on delivery. Ships to your default <a class="underline" href="addresses.php">shipping address</a>.</p>
                             <form method="POST" action="" id="checkoutForm">
                                 <button type="submit" 
                                         name="checkout" 
@@ -669,10 +683,10 @@ foreach ($cart_items as $item) {
                                     <div class="text-sm font-medium text-gray-700">Cash on Delivery</div>
                                 </div>
                                 <div class="p-3 bg-gray-100 rounded-lg text-center">
-                                    <div class="text-sm font-medium text-gray-700">GCash</div>
+                                    <div class="text-sm text-gray-500">GCash (unavailable)</div>
                                 </div>
                                 <div class="p-3 bg-gray-100 rounded-lg text-center">
-                                    <div class="text-sm font-medium text-gray-700">Bank Transfer</div>
+                                    <div class="text-sm text-gray-500">Bank Transfer (unavailable)</div>
                                 </div>
                             </div>
                         </div>

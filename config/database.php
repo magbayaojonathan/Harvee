@@ -2,27 +2,13 @@
 require_once __DIR__ . '/i18n.php';
 harvee_i18n_bootstrap();
 
-// Environment-first configuration with host-aware defaults.
-$httpHost = $_SERVER['HTTP_HOST'] ?? '';
-$isInfinityFreeHost =
-    stripos($httpHost, 'infinityfreeapp.com') !== false ||
-    stripos($httpHost, 'epizy.com') !== false;
-
-// Local defaults
+// Credentials are configured through the hosting environment.
 $defaultHost = 'localhost';
 $defaultPort = '3306';
 $defaultDbName = 'harvee_marketplace';
 $defaultDbUser = 'root';
 $defaultDbPass = '';
 $defaultCharset = 'utf8mb4';
-
-// InfinityFree defaults (update host/password with your panel values if needed)
-if ($isInfinityFreeHost) {
-    $defaultHost = 'sql209.infinityfree.com';
-    $defaultDbName = 'if0_41295176_harvee';
-    $defaultDbUser = 'if0_41295176';
-    $defaultDbPass = 'Marco01182005';
-}
 
 $host = getenv('DB_HOST') ?: $defaultHost;
 $port = getenv('DB_PORT') ?: $defaultPort;
@@ -40,13 +26,22 @@ $options = [
 ];
 
 try {
+    if (getenv('APP_ENV') === 'production') {
+        foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $key) {
+            if (getenv($key) === false || getenv($key) === '') {
+                throw new PDOException('Missing database configuration: ' . $key);
+            }
+        }
+    }
+    if ($ca = getenv('DB_SSL_CA')) {
+        $options[PDO::MYSQL_ATTR_SSL_CA] = $ca;
+        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    }
     $pdo = new PDO($dsn, $username, $password, $options);
 } catch (PDOException $e) {
-    // Show real DB errors during setup; set APP_DEBUG=0 to hide details later.
-    $isDebug = getenv('APP_DEBUG');
-    $isDebug = ($isDebug === false) ? true : ($isDebug === '1');
-    $message = $isDebug
-        ? "Database connection failed: " . $e->getMessage()
-        : "Database connection failed.";
-    die($message);
+    error_log('Database connection failed: ' . $e->getMessage());
+    http_response_code(503);
+    die(getenv('APP_DEBUG') === '1' && getenv('APP_ENV') !== 'production'
+        ? 'Database connection failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8')
+        : 'Service temporarily unavailable. Please try again later.');
 }

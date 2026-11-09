@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } 
                 else {
                     // Login successful
+                    session_regenerate_id(true);
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['first_name'] = $user['first_name'];
                     $_SESSION['last_name'] = $user['last_name'];
@@ -394,10 +395,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <!-- Social Auth -->
                     <div class="social-auth">
-                        <button type="button" class="social-btn google text-sm">
+                        <button type="button" disabled title="Social sign-in is not available yet" class="social-btn google text-sm">
                             <img src="../assets/images/google.png" alt="Google"> Google
                         </button>
-                        <button type="button" class="social-btn facebook text-sm">
+                        <button type="button" disabled title="Social sign-in is not available yet" class="social-btn facebook text-sm">
                             <img src="../assets/images/facebook.png" alt="Facebook"> Facebook
                         </button>
                     </div>

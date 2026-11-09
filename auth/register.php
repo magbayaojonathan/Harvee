@@ -620,10 +620,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                                 
                                 <div class="social-auth">
-                                    <button type="button" class="social-btn google">
+                                    <button type="button" disabled title="Social sign-in is not available yet" class="social-btn google">
                                         <img src="../assets/images/google.png" alt="Google"><span>Google</span>
                                     </button>
-                                    <button type="button" class="social-btn facebook">
+                                    <button type="button" disabled title="Social sign-in is not available yet" class="social-btn facebook">
                                         <img src="../assets/images/facebook.png" alt="Facebook"><span>Facebook</span>
                                     </button>
                                 </div>
